@@ -54,6 +54,28 @@ function RankingInner() {
         )}
       </section>
 
+      {/* pódio top-3 estilo Mindster */}
+      {players.length > 0 && (
+        <section className="flex items-end justify-center gap-4 py-2">
+          {[1, 0, 2].map((pos) => players[pos] && (
+            <Link key={players[pos].id} href={`/perfil?u=${players[pos].username}`}
+              className="flex flex-col items-center gap-1">
+              <span className={`flex items-center justify-center rounded-full border-4 font-bold ${
+                pos === 0 ? 'h-20 w-20 border-yellow-400 text-2xl'
+                : pos === 1 ? 'h-16 w-16 border-gray-300 text-xl'
+                : 'h-14 w-14 border-amber-600 text-lg'}`}
+                style={{ background: 'var(--panel-2)' }}>
+                {MEDAL[pos]}
+              </span>
+              <span className="max-w-[6.5rem] truncate text-xs font-semibold">
+                {players[pos].fullName}
+              </span>
+              <span className="chip !py-0.5 text-xs">{players[pos].rating}</span>
+            </Link>
+          ))}
+        </section>
+      )}
+
       <section className="panel p-4">
         <h2 className="mb-3 font-semibold">Jogadores</h2>
         {players.length === 0 ? (

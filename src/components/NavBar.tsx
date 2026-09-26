@@ -6,13 +6,18 @@ import { usePathname, useRouter } from 'next/navigation';
 import { getSession, onAuthChange, getMyPlayer, signOut } from '@/lib/auth';
 import type { Player } from '@/lib/types';
 
-const NAV = [
-  ['Jogar', '/jogar'],
-  ['Ranking', '/ranking'],
+const TABS = [
+  ['Início', '/', '🏠'],
+  ['Jogar', '/jogar', '♞'],
+  ['Academy', '/academy', '📖'],
+  ['Ranking', '/ranking', '🏆'],
+  ['Perfil', '/perfil', '👤'],
+] as const;
+
+const MORE = [
   ['Batalha dos Cursos', '/batalha'],
   ['Temporadas', '/temporadas'],
   ['Torneios', '/torneios'],
-  ['Academy', '/academy'],
   ['Comunidade', '/comunidade'],
   ['Honor Board', '/honor-board'],
   ['Insights', '/insights'],
@@ -24,6 +29,7 @@ export default function NavBar() {
   const router = useRouter();
   const [player, setPlayer] = useState<Player | null>(null);
   const [authed, setAuthed] = useState(false);
+  const [more, setMore] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,36 +50,58 @@ export default function NavBar() {
   if (pathname === '/login') return null;
 
   return (
-    <header className="border-b border-[var(--border)]">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-4 px-4 py-3">
-        <Link href="/" className="text-lg font-bold">
-          ♞ Kibaúla <span className="accent">Chess</span>
-        </Link>
-        <nav className="flex flex-wrap gap-3 text-sm muted">
-          {NAV.map(([label, href]) => (
-            <Link key={href} href={href} className="hover:text-white">
-              {label}
-            </Link>
-          ))}
-        </nav>
-        <div className="ml-auto flex items-center gap-3 text-sm">
-          {authed && player && (
-            <Link href="/perfil" className="muted hover:text-white">
-              {player.username}{player.inpVerified ? ' ✓' : ''}
-            </Link>
-          )}
-          {authed ? (
-            <button
-              className="muted hover:text-white"
-              onClick={async () => { await signOut(); router.replace('/login'); }}
-            >
-              Sair
-            </button>
-          ) : (
-            <Link href="/login" className="btn text-sm">Entrar</Link>
-          )}
+    <>
+      <header className="top-bar">
+        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
+          <Link href="/" className="text-lg font-extrabold tracking-tight">
+            ♞ Kibaúla<span className="accent">Chess</span>
+          </Link>
+          <div className="ml-auto flex items-center gap-3 text-sm">
+            {authed && player && (
+              <Link href="/perfil" className="chip">
+                {player.username}{player.inpVerified ? ' ✓' : ''} · {player.rating}
+              </Link>
+            )}
+            {authed ? (
+              <button className="muted hover:text-white"
+                onClick={async () => { await signOut(); router.replace('/login'); }}>
+                Sair
+              </button>
+            ) : (
+              <Link href="/login" className="btn text-sm">Entrar</Link>
+            )}
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {more && (
+        <div className="fixed inset-0 z-40" onClick={() => setMore(false)}>
+          <div className="panel absolute bottom-16 right-2 left-2 mx-auto max-w-md p-2 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}>
+            {MORE.map(([label, href]) => (
+              <Link key={href} href={href} onClick={() => setMore(false)}
+                className="block rounded-lg px-3 py-2.5 text-sm hover:bg-[var(--panel-2)]">
+                {label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <nav className="bottom-nav">
+        {TABS.map(([label, href, icon]) => (
+          <Link key={href} href={href}
+            className={pathname === href || (href !== '/' && pathname.startsWith(href)) ? 'active' : ''}>
+            <span className="nav-icon">{icon}</span>
+            {label}
+          </Link>
+        ))}
+        <a href="#" onClick={(e) => { e.preventDefault(); setMore((v) => !v); }}
+          className={more ? 'active' : ''}>
+          <span className="nav-icon">☰</span>
+          Mais
+        </a>
+      </nav>
+    </>
   );
 }
