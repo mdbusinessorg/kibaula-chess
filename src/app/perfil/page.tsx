@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getPlayer } from '@/lib/queries';
+import { getSession, getMyPlayer } from '@/lib/auth';
 import type { Player } from '@/lib/types';
 
 function PerfilInner() {
@@ -11,8 +12,13 @@ function PerfilInner() {
   const [p, setP] = useState<Player | null | undefined>(undefined);
 
   useEffect(() => {
-    if (!username) { setP(null); return; }
-    getPlayer(username).then(setP).catch(() => setP(null));
+    const t = setTimeout(() => {
+      const run = username
+        ? getPlayer(username)
+        : getSession().then((s) => (s ? getMyPlayer(s.userId) : null));
+      run.then(setP).catch(() => setP(null));
+    });
+    return () => clearTimeout(t);
   }, [username]);
 
   if (p === undefined) return <p className="muted">A carregar…</p>;
