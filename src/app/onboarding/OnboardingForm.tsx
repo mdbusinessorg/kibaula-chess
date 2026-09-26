@@ -1,8 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { CourseCard } from '@/components/CourseCard';
-import { registerPlayer } from '@/lib/queries';
+import { completeOnboarding } from '@/lib/queries';
+import { getSession } from '@/lib/auth';
 import type { ClassUnit, Course } from '@/lib/types';
 
 export default function OnboardingForm({
@@ -12,15 +14,20 @@ export default function OnboardingForm({
   courses: Course[];
   classes: ClassUnit[];
 }) {
+  const router = useRouter();
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [courseId, setCourseId] = useState<string | null>(null);
-  const [fullName, setFullName] = useState('');
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
   const [classId, setClassId] = useState('');
   const [grade, setGrade] = useState('');
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSession().then((s) => {
+      if (!s) router.replace('/login');
+      else setAuthUserId(s.userId);
+    });
+  }, [router]);
 
   const courseClasses = useMemo(
     () => classes.filter((c) => c.courseId === courseId),
@@ -28,31 +35,19 @@ export default function OnboardingForm({
   );
 
   async function submit() {
+    if (!authUserId) return;
     setError(null);
     setBusy(true);
     try {
-      await registerPlayer({
-        fullName, username, email, courseId: courseId!,
+      await completeOnboarding({
+        authUserId, courseId: courseId!,
         classId: classId || null, gradeLabel: grade || null,
       });
-      setDone(username);
+      router.replace('/');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao registar.');
-    } finally {
       setBusy(false);
     }
-  }
-
-  if (done) {
-    return (
-      <div className="panel p-6">
-        <h2 className="text-lg font-semibold">Bem-vindo ao Kibaúla, {done} ♞</h2>
-        <p className="mt-2 text-sm muted">
-          O teu curso faz agora parte do teu perfil. Um administrador pode
-          verificar a tua turma para receberes o badge ✓ INP Verified.
-        </p>
-      </div>
-    );
   }
 
   return (
@@ -69,14 +64,8 @@ export default function OnboardingForm({
       </div>
 
       <div className="panel space-y-3 p-5">
-        <h2 className="font-semibold">Os teus dados</h2>
+        <h2 className="font-semibold">A tua turma</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          <input placeholder="Nome completo" value={fullName}
-            onChange={(e) => setFullName(e.target.value)} />
-          <input placeholder="Username" value={username}
-            onChange={(e) => setUsername(e.target.value)} />
-          <input placeholder="Email" type="email" value={email}
-            onChange={(e) => setEmail(e.target.value)} />
           <input placeholder="Classe (ex.: 13ª)" value={grade}
             onChange={(e) => setGrade(e.target.value)} />
           <select value={classId} onChange={(e) => setClassId(e.target.value)}>
@@ -89,10 +78,10 @@ export default function OnboardingForm({
         {error && <p className="text-sm text-red-400">{error}</p>}
         <button
           className="btn"
-          disabled={busy || !courseId || !fullName || !username}
+          disabled={busy || !courseId || !authUserId}
           onClick={submit}
         >
-          {busy ? 'A registar…' : 'Criar perfil'}
+          {busy ? 'A registar…' : 'Concluir registo'}
         </button>
       </div>
     </div>

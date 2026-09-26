@@ -119,6 +119,48 @@ export async function getHonorBoard(): Promise<
 
 // ---- escrita (onboarding + admin) ----
 
+/** Completa o perfil académico da conta autenticada (curso/turma escolhidos pelo aluno). */
+export async function completeOnboarding(p: {
+  authUserId: string; courseId: string; classId: string | null; gradeLabel: string | null;
+  fullName?: string; username?: string;
+}) {
+  let classId = p.classId;
+  if (!classId && p.gradeLabel) {
+    const { data: year } = await supabase.from('academic_years')
+      .select('id').eq('active', true).limit(1).single();
+    if (year) {
+      const { data: existing } = await supabase.from('classes')
+        .select('id').eq('course_id', p.courseId)
+        .eq('academic_year_id', year.id).eq('name', p.gradeLabel).maybeSingle();
+      if (existing) {
+        classId = existing.id;
+      } else {
+        const { data: cls } = await supabase.from('classes').insert({
+          course_id: p.courseId, academic_year_id: year.id,
+          name: p.gradeLabel, grade_label: p.gradeLabel,
+        }).select('id').single();
+        classId = cls?.id ?? null;
+      }
+    }
+  }
+  const updates: Record<string, unknown> = {
+    course_id: p.courseId, class_id: classId,
+  };
+  if (p.fullName) updates.full_name = p.fullName;
+  if (p.username) updates.username = p.username;
+  const { data: row } = await supabase.from('players')
+    .update(updates).eq('auth_user_id', p.authUserId).select('id').maybeSingle();
+  if (!row) {
+    // ainda não existe (ex.: conta criada antes do trigger) — cria agora
+    const { error } = await supabase.from('players').insert({
+      auth_user_id: p.authUserId, course_id: p.courseId, class_id: classId,
+      full_name: p.fullName ?? 'Aluno',
+      username: p.username ?? `user_${p.authUserId.slice(0, 8)}`,
+    });
+    if (error) throw new Error(error.message);
+  }
+}
+
 export async function registerPlayer(p: {
   fullName: string; username: string; email: string;
   courseId: string; classId: string | null; gradeLabel: string | null;
