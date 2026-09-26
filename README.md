@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ♞ Kibaúla Chess
 
-## Getting Started
+Plataforma conceptual de xadrez desenvolvida para a comunidade académica do
+Instituto Nacional de Petróleos (INP). Projeto conceptual — não é uma aplicação
+oficial do INP.
 
-First, run the development server:
+Xadrez + Comunidade + Identidade Académica + Competição + Aprendizagem.
+
+## Stack
+
+Next.js (App Router) · TypeScript · Tailwind CSS · Supabase/PostgreSQL
+
+## Estrutura académica
+
+Institution → Education Type → Course → Class (Turma) → Academic Year → Student
+
+- 8 cursos do Ensino Médio do INP + Formação Profissional (configuráveis no admin)
+- Onboarding com selecção de curso; turma escolhida pelo utilizador e verificável pelo admin (✓ INP Verified)
+- Rankings: Geral, por Curso, por Turma — método configurável (`ranking_config`)
+- Batalha dos Cursos, Kibaúla Season (histórico preservado), INP Championship, Kibaúla Cup
+- Honor Board, INP Chess Insights, Community Map, Academy temática
+- Admin: gestão académica, importação CSV de alunos, verificação institucional
+
+## Setup
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Sem Supabase configurado a app corre em modo local com o catálogo de cursos
+reais e estatísticas a zero (sem números fictícios).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Para ligar à base de dados:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...        # leitura
+SUPABASE_SERVICE_ROLE_KEY=...           # escrita (admin/onboarding)
+```
 
-## Learn More
+Depois aplica as migrations em `supabase/migrations/` (0001 schema, 0002 seed
+com os cursos reais do INP).
 
-To learn more about Next.js, take a look at the following resources:
+## Fontes institucionais
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Nomes/categorias baseados nas fontes oficiais do INP (inp.gov.ao). Não é copiado
+conteúdo protegido nem identidade visual.
