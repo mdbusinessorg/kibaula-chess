@@ -1,12 +1,23 @@
+'use client';
+
 import Link from 'next/link';
-import { getClasses, getCourses, getPlayers } from '@/lib/data';
+import { useEffect, useState } from 'react';
+import { getClasses, getCourses, getPlayers } from '@/lib/queries';
+import type { ClassUnit, Course, Player } from '@/lib/types';
 
-export const dynamic = 'force-dynamic';
+export default function ComunidadePage() {
+  const [data, setData] = useState<{
+    courses: Course[]; classes: ClassUnit[]; players: Player[];
+  } | null>(null);
 
-export default async function ComunidadePage() {
-  const [courses, classes, players] = await Promise.all([
-    getCourses(), getClasses(), getPlayers(),
-  ]);
+  useEffect(() => {
+    Promise.all([getCourses(), getClasses(), getPlayers()])
+      .then(([courses, classes, players]) => setData({ courses, classes, players }))
+      .catch(() => setData({ courses: [], classes: [], players: [] }));
+  }, []);
+
+  if (!data) return <p className="muted">A carregar…</p>;
+  const { courses, classes, players } = data;
 
   return (
     <div>
@@ -34,7 +45,7 @@ export default async function ComunidadePage() {
               {coursePlayers.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2 text-sm">
                   {coursePlayers.map((p) => (
-                    <Link key={p.id} href={`/perfil/${p.username}`}
+                    <Link key={p.id} href={`/perfil?u=${p.username}`}
                       className="rounded bg-[#0d141c] px-2 py-1 hover:underline">
                       {p.fullName} <span className="muted">({p.rating})</span>
                     </Link>

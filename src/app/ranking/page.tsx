@@ -1,22 +1,32 @@
-import Link from 'next/link';
-import { getClasses, getCourses, getPlayers } from '@/lib/data';
+'use client';
 
-export const dynamic = 'force-dynamic';
+import Link from 'next/link';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { getClasses, getCourses, getPlayers } from '@/lib/queries';
+import type { ClassUnit, Course, Player } from '@/lib/types';
 
 const MEDAL = ['🥇', '🥈', '🥉'];
 
-export default async function RankingPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ curso?: string; turma?: string }>;
-}) {
-  const { curso, turma } = await searchParams;
-  const [courses, classes] = await Promise.all([getCourses(), getClasses()]);
+function RankingInner() {
+  const params = useSearchParams();
+  const curso = params.get('curso') ?? undefined;
+  const turma = params.get('turma') ?? undefined;
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [classes, setClasses] = useState<ClassUnit[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+
   const course = courses.find((c) => c.slug === curso);
-  const players = await getPlayers({
-    courseId: course?.id,
-    classId: turma || undefined,
-  });
+
+  useEffect(() => {
+    getCourses().then(setCourses).catch(() => {});
+    getClasses().then(setClasses).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    getPlayers({ courseId: course?.id, classId: turma })
+      .then(setPlayers).catch(() => setPlayers([]));
+  }, [course?.id, turma]);
 
   return (
     <div className="space-y-8">
@@ -58,7 +68,7 @@ export default async function RankingPage({
                 <tr key={p.id} className="border-t border-[var(--border)]">
                   <td className="py-2">{MEDAL[i] ?? i + 1}</td>
                   <td>
-                    <Link className="hover:underline" href={`/perfil/${p.username}`}>
+                    <Link className="hover:underline" href={`/perfil?u=${p.username}`}>
                       {p.fullName}
                     </Link>
                     {p.inpVerified && <span className="ml-1 text-xs accent">✓ INP Verified</span>}
@@ -108,5 +118,13 @@ export default async function RankingPage({
         )}
       </section>
     </div>
+  );
+}
+
+export default function RankingPage() {
+  return (
+    <Suspense fallback={<p className="muted">A carregar…</p>}>
+      <RankingInner />
+    </Suspense>
   );
 }

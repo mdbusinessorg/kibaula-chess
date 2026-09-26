@@ -1,16 +1,22 @@
-import { notFound } from 'next/navigation';
-import { getPlayer } from '@/lib/data';
+'use client';
 
-export const dynamic = 'force-dynamic';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { getPlayer } from '@/lib/queries';
+import type { Player } from '@/lib/types';
 
-export default async function PerfilPage({
-  params,
-}: {
-  params: Promise<{ username: string }>;
-}) {
-  const { username } = await params;
-  const p = await getPlayer(username);
-  if (!p) notFound();
+function PerfilInner() {
+  const params = useSearchParams();
+  const username = params.get('u');
+  const [p, setP] = useState<Player | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (!username) { setP(null); return; }
+    getPlayer(username).then(setP).catch(() => setP(null));
+  }, [username]);
+
+  if (p === undefined) return <p className="muted">A carregar…</p>;
+  if (!p) return <p className="muted">Jogador não encontrado.</p>;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -50,5 +56,13 @@ export default async function PerfilPage({
         </dl>
       </section>
     </div>
+  );
+}
+
+export default function PerfilPage() {
+  return (
+    <Suspense fallback={<p className="muted">A carregar…</p>}>
+      <PerfilInner />
+    </Suspense>
   );
 }

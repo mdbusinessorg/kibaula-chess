@@ -1,10 +1,16 @@
-import { getCourses } from '@/lib/data';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { getCourses } from '@/lib/queries';
+import type { Course } from '@/lib/types';
 import Battle from './Battle';
 
-export const dynamic = 'force-dynamic';
+export default function BatalhaPage() {
+  const [courses, setCourses] = useState<Course[]>([]);
+  useEffect(() => {
+    getCourses().then(setCourses).catch(() => {});
+  }, []);
 
-export default async function BatalhaPage() {
-  const courses = await getCourses();
   return (
     <div>
       <h1 className="text-2xl font-bold">⚔️ Kibaúla — Batalha dos Cursos</h1>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { adminAction } from '@/lib/queries';
 import type { ClassUnit, Course, Player, RankingMethod } from '@/lib/types';
 
 const METHODS: { value: RankingMethod; label: string }[] = [
@@ -11,22 +12,13 @@ const METHODS: { value: RankingMethod; label: string }[] = [
   { value: 'tournaments', label: 'Torneios' },
 ];
 
-async function call(action: string, payload: Record<string, unknown>) {
-  const res = await fetch('/api/admin', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, ...payload }),
-  });
-  const body = await res.json();
-  if (!res.ok) throw new Error(body.error);
-  return body;
-}
+
 
 export default function AdminPanel({
-  courses, classes, players, method,
+  courses, classes, players, method, onChange,
 }: {
   courses: Course[]; classes: ClassUnit[];
-  players: Player[]; method: RankingMethod;
+  players: Player[]; method: RankingMethod; onChange: () => void;
 }) {
   const [msg, setMsg] = useState('');
   const [csv, setCsv] = useState('');
@@ -35,7 +27,7 @@ export default function AdminPanel({
 
   const run = (fn: () => Promise<unknown>) =>
     fn()
-      .then(() => { setMsg('OK — atualizado.'); })
+      .then(() => { setMsg('OK — atualizado.'); onChange(); })
       .catch((e) => setMsg(`Erro: ${e.message}`));
 
   return (
@@ -49,7 +41,7 @@ export default function AdminPanel({
             {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
           <button className="btn text-sm" onClick={() => run(() =>
-            call('setRankingMethod', {
+            adminAction('setRankingMethod', {
               method: (document.getElementById('method') as HTMLSelectElement).value,
             }))}>Guardar</button>
         </div>
@@ -60,7 +52,7 @@ export default function AdminPanel({
         <form className="grid gap-2 sm:grid-cols-4" onSubmit={(e) => {
           e.preventDefault();
           const f = new FormData(e.currentTarget);
-          run(() => call('createCourse', {
+          run(() => adminAction('createCourse', {
             name: f.get('name'), slug: f.get('slug'),
             abbreviation: f.get('abbr'), icon: f.get('icon'),
             educationType: f.get('etype'),
@@ -81,7 +73,7 @@ export default function AdminPanel({
             <span key={c.id} className="rounded border border-[var(--border)] px-2 py-1">
               {c.icon} {c.abbreviation}
               <button className="ml-2 text-red-400" onClick={() => run(() =>
-                call('archiveCourse', { courseId: c.id, archived: true }))}>
+                adminAction('archiveCourse', { courseId: c.id, archived: true }))}>
                 arquivar
               </button>
             </span>
@@ -94,7 +86,7 @@ export default function AdminPanel({
         <form className="grid gap-2 sm:grid-cols-4" onSubmit={(e) => {
           e.preventDefault();
           const f = new FormData(e.currentTarget);
-          run(() => call('createClass', {
+          run(() => adminAction('createClass', {
             courseId: f.get('course'), name: f.get('name'), gradeLabel: f.get('grade'),
           }));
         }}>
@@ -119,7 +111,7 @@ export default function AdminPanel({
         <form className="flex gap-2" onSubmit={(e) => {
           e.preventDefault();
           const f = new FormData(e.currentTarget);
-          run(() => call('createAcademicYear', { label: f.get('label') }));
+          run(() => adminAction('createAcademicYear', { label: f.get('label') }));
         }}>
           <input name="label" placeholder="ex.: 2026" required />
           <button className="btn text-sm">Criar</button>
@@ -144,7 +136,7 @@ export default function AdminPanel({
                   <td>{p.inpVerified ? '✓' : '—'}</td>
                   <td>
                     <button className="btn-ghost text-xs" onClick={() => run(() =>
-                      call('verifyStudent', { playerId: p.id, verified: !p.inpVerified }))}>
+                      adminAction('verifyStudent', { playerId: p.id, verified: !p.inpVerified }))}>
                       {p.inpVerified ? 'Remover verificação' : 'Verificar (INP ✓)'}
                     </button>
                   </td>
@@ -166,8 +158,8 @@ export default function AdminPanel({
           placeholder={'Matias Domingos,matias,matias@exemplo.com,electromecanica,13ª,EM13-A,2026,Estudante'}
         />
         <button className="btn text-sm" onClick={() =>
-          call('importStudents', { csv })
-            .then((b) => setImportResult(b.results))
+          adminAction('importStudents', { csv })
+            .then((r) => { setImportResult(r as never); onChange(); })
             .catch((e) => setMsg(`Erro: ${e.message}`))}>
           Importar
         </button>
@@ -187,7 +179,7 @@ export default function AdminPanel({
         <form className="flex gap-2" onSubmit={(e) => {
           e.preventDefault();
           const f = new FormData(e.currentTarget);
-          run(() => call('createSeason', { name: f.get('sname'), active: true }));
+          run(() => adminAction('createSeason', { name: f.get('sname'), active: true }));
         }}>
           <input name="sname" placeholder="Temporada 2026" required />
           <button className="btn text-sm">Criar temporada</button>
@@ -195,7 +187,7 @@ export default function AdminPanel({
         <form className="flex gap-2" onSubmit={(e) => {
           e.preventDefault();
           const f = new FormData(e.currentTarget);
-          run(() => call('createTournament', {
+          run(() => adminAction('createTournament', {
             kind: f.get('kind'), name: f.get('tname'),
           }));
         }}>
