@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
-/* Kibaúla Chess — tema escuro estilo chess.com */
+/* Kibaúla Chess — tema escuro roxo próprio */
 :root {
-  --bg: #262421;
-  --panel: #2e2b28;
-  --panel-2: #383532;
-  --border: #454340;
-  --text: #f0edea;
-  --muted: #a19d99;
-  --accent: #81b64c;      /* verde chess.com */
-  --accent-2: #98cc5e;
+  --bg: #12081f;
+  --panel: #1e1130;
+  --panel-2: #2a1a42;
+  --border: #3c2658;
+  --text: #f2ecf9;
+  --muted: #a893c4;
+  --accent: #a855f7;
+  --accent-2: #7c3aed;
   --orange: #e8821e;
   --gold: #e7b34a;
 }
@@ -84,7 +84,7 @@ body {
 .chip.gold { color: var(--gold); border-color: var(--gold); }
 
 .banner {
-  background: linear-gradient(120deg, #4a7a2c, #81b64c);
+  background: linear-gradient(120deg, #6d28d9, #a855f7);
   border-radius: 0.75rem;
   color: #fff;
 }

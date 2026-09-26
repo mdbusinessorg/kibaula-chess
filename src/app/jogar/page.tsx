@@ -138,6 +138,13 @@ function useHints(game: Chess, canMove: boolean, tryMove: (from: string, to: str
   return { squareStyles: styles, onSquareClick, markMove, clear: () => setSelected(null) };
 }
 
+// tabuleiro junto, sem espaços entre casas — cores próprias roxas
+const BOARD_OPTS = {
+  lightSquareStyle: { backgroundColor: '#ede3f7' },
+  darkSquareStyle: { backgroundColor: '#8a5fc0' },
+  boardStyle: { borderRadius: '0.5rem', overflow: 'hidden' },
+} as const;
+
 const TIME_CONTROLS: { label: string; seconds: number | null }[] = [
   { label: 'Sem relógio', seconds: null },
   { label: 'Bullet · 1 min', seconds: 60 },
@@ -256,6 +263,7 @@ function BotGame({ player, botRating, color, onExit }: {
           onSquareClick: hints.onSquareClick,
           squareStyles: hints.squareStyles,
           allowDragging: !over,
+          ...BOARD_OPTS,
         }} />
         <PlayerCard name={player.username} rating={player.rating} clock={null} active={game.turn() === color && !over} />
       </div>
@@ -430,6 +438,7 @@ function LiveGame({ matchId, me, onExit }: { matchId: string; me: Player; onExit
           onSquareClick: hints.onSquareClick,
           squareStyles: hints.squareStyles,
           allowDragging: !!myTurn,
+          ...BOARD_OPTS,
         }} />
         <PlayerCard
           name={me.username}

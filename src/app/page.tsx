@@ -98,7 +98,13 @@ export default function Home() {
             {recent.map((g) => (
               <Link key={g.id} href="/jogar" className="tile overflow-hidden">
                 <div className="pointer-events-none w-full">
-                  <Chessboard options={{ position: g.fen, allowDragging: false }} />
+                  <Chessboard options={{
+                    position: g.fen,
+                    allowDragging: false,
+                    lightSquareStyle: { backgroundColor: '#ede3f7' },
+                    darkSquareStyle: { backgroundColor: '#8a5fc0' },
+                    boardStyle: { borderRadius: 0 },
+                  }} />
                 </div>
                 <div className="p-2 text-xs">
                   <div className="truncate font-semibold">{g.white} vs {g.black}</div>

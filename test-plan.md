@@ -1,36 +1,30 @@
-# Kibaúla Chess — Test Plan (fallback mode, no Supabase)
+# Kibaúla Chess — Test Plan (real Supabase, auth + live chess)
 
-App: Next.js 16 dev server at http://localhost:3000 (already running, `node node_modules/next/dist/bin/next dev -p 3000`). All tests via browser UI with recording.
+Server: `node node_modules/next/dist/bin/next dev -p 3000` (running, .env.local loaded).
+Admin creds: matiasdomingos158@gmail.com / Kibaula@Admin2208.
 
-## T1 — Landing page
-- Open `/`. Assert: hero "Kibaúla Chess" visible; heading "8 ÁREAS. UMA COMUNIDADE."; exactly 8 course cards in grid; footer text contains "Projeto conceptual" and "não é uma aplicação oficial do INP".
-- Hover one card: stats row appears ("0 jogadores · 0 partidas", "Rating médio: —", "#N no Ranking Kibaúla").
+## T1 — Auth gate
+- Fresh browser → any page redirects to /login. Login with admin creds → lands on platform (onboarding if no course assigned).
 
-## T2 — Onboarding
-- Open `/onboarding`. Assert: course selector/cards show 8 INP courses with icon + abbreviation; form fields (nome, username, email, curso) present.
-- Fill form and submit. Assert: fails visibly with clear error — UI shows error message (API returns 503 "Base de dados não configurada (Supabase)."), no crash.
+## T2 — Home (chess.com style)
+- Avatar+username, rating row (Blitz/Rápida/Bullet/Geral), green "Play!" button, "Play Computer", mini-boards of previous games, course cards with hover stats (regression from PR #2).
 
-## T3 — Ranking
-- Open `/ranking`. Assert: course filter present; sections "Jogadores", "Ranking dos Cursos" (with 8 courses listed at 0), "Ranking por Turma" (empty) render without errors.
-- Click a course filter. Assert: page updates, still no errors.
+## T3 — /jogar Bot game
+- New Game screen: Online/Bot selector; Bot → rating slider 500–3000 + color; "Iniciar partida" opens board.
+- Click a piece → legal-move dots; captures show red ring; click-to-move works; drag works; move list with times; no console errors (sounds).
+- Try to force a quick mate or resignation path; game ends correctly.
 
-## T4 — Batalha
-- Open `/batalha`. Assert: two course selects with "VS"; both panels show bars at 0.
-- Set both selects to the same course. Assert: comparison disappears, message "Escolhe dois cursos diferentes." shows.
+## T4 — Online match
+- "Convidar amigo" → creates waiting match, shows copyable /jogar?m=<id> link.
+- Open link in second profile/incognito, sign up second test account, join → live board both sides, cards with clocks, ½ Empate / Desistir / Mais buttons.
+- Play 2-3 moves alternating sides (two windows) — verify realtime sync.
+- "Adversário aleatório": joins open challenge or creates waiting.
 
-## T5 — Static-ish pages
-- `/temporadas`: renders, empty state, no error.
-- `/torneios`: renders, empty state.
-- `/academy`: 5 categories listed.
-- `/honor-board`: renders, empty state.
-- `/insights`: counters at 0.
-- `/comunidade`: 8 courses listed.
+## T5 — Ranking
+- Podium top-3 with circles.
 
-## T6 — Admin
-- Open `/admin`. Assert: forms present. Trigger one action (e.g. submit season/form). Assert: error shown "Supabase não configurado" or similar; page does not crash.
+## T6 — Bottom nav
+- Bar (Início/Jogar/Academy/Ranking/Perfil/Mais) on all pages except /login.
 
-## T7 — 404
-- `/perfil/qualquer` → proper 404 page.
-
-## T8 — Console errors
-- Throughout navigation, check browser console: no red errors (hydration/500s).
+## T7 — Regressions
+- No console/hydration errors anywhere.
