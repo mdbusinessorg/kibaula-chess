@@ -1,14 +1,20 @@
-import { getTournaments } from '@/lib/data';
+'use client';
 
-export const dynamic = 'force-dynamic';
+import { useEffect, useState } from 'react';
+import { getTournaments } from '@/lib/queries';
+import type { Tournament } from '@/lib/types';
 
 const PHASE_LABELS: Record<string, string> = {
   groups: 'Fase de Grupos', r16: 'Oitavas', quarters: 'Quartos',
   semis: 'Semifinal', final: 'Final',
 };
 
-export default async function TorneiosPage() {
-  const tournaments = await getTournaments();
+export default function TorneiosPage() {
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  useEffect(() => {
+    getTournaments().then(setTournaments).catch(() => {});
+  }, []);
+
   const champ = tournaments.filter((t) => t.kind === 'championship');
   const cups = tournaments.filter((t) => t.kind === 'cup');
 

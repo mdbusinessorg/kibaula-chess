@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { CourseCard } from '@/components/CourseCard';
+import { registerPlayer } from '@/lib/queries';
 import type { ClassUnit, Course } from '@/lib/types';
 
 export default function OnboardingForm({
@@ -17,6 +18,7 @@ export default function OnboardingForm({
   const [email, setEmail] = useState('');
   const [classId, setClassId] = useState('');
   const [grade, setGrade] = useState('');
+  const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,17 +29,18 @@ export default function OnboardingForm({
 
   async function submit() {
     setError(null);
-    const res = await fetch('/api/onboarding', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fullName, username, email, courseId,
+    setBusy(true);
+    try {
+      await registerPlayer({
+        fullName, username, email, courseId: courseId!,
         classId: classId || null, gradeLabel: grade || null,
-      }),
-    });
-    const body = await res.json();
-    if (!res.ok) setError(body.error ?? 'Erro ao registar.');
-    else setDone(username);
+      });
+      setDone(username);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao registar.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (done) {
@@ -86,10 +89,10 @@ export default function OnboardingForm({
         {error && <p className="text-sm text-red-400">{error}</p>}
         <button
           className="btn"
-          disabled={!courseId || !fullName || !username}
+          disabled={busy || !courseId || !fullName || !username}
           onClick={submit}
         >
-          Criar perfil
+          {busy ? 'A registar…' : 'Criar perfil'}
         </button>
       </div>
     </div>

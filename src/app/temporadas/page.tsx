@@ -1,9 +1,15 @@
-import { getSeasons } from '@/lib/data';
+'use client';
 
-export const dynamic = 'force-dynamic';
+import { useEffect, useState } from 'react';
+import { getSeasons } from '@/lib/queries';
+import type { Season } from '@/lib/types';
 
-export default async function TemporadasPage() {
-  const seasons = await getSeasons();
+export default function TemporadasPage() {
+  const [seasons, setSeasons] = useState<Season[] | null>(null);
+  useEffect(() => {
+    getSeasons().then(setSeasons).catch(() => setSeasons([]));
+  }, []);
+
   return (
     <div>
       <h1 className="text-2xl font-bold">🎓 Kibaúla Season</h1>
@@ -11,7 +17,9 @@ export default async function TemporadasPage() {
         Temporadas com ranking, torneios, campeões e histórico. Temporadas antigas
         nunca são apagadas.
       </p>
-      {seasons.length === 0 ? (
+      {seasons === null ? (
+        <p className="muted">A carregar…</p>
+      ) : seasons.length === 0 ? (
         <p className="panel p-5 text-sm muted">
           Ainda não há temporadas. O administrador cria a primeira (ex.: Temporada 2026).
         </p>

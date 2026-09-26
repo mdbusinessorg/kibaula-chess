@@ -1,9 +1,16 @@
-import { getHonorBoard } from '@/lib/data';
+'use client';
 
-export const dynamic = 'force-dynamic';
+import { useEffect, useState } from 'react';
+import { getHonorBoard } from '@/lib/queries';
 
-export default async function HonorBoardPage() {
-  const entries = await getHonorBoard();
+export default function HonorBoardPage() {
+  const [entries, setEntries] = useState<
+    { player: string; achievement: string; season: string | null }[] | null
+  >(null);
+  useEffect(() => {
+    getHonorBoard().then(setEntries).catch(() => setEntries([]));
+  }, []);
+
   return (
     <div>
       <h1 className="text-2xl font-bold">🏅 Kibaúla Honor Board</h1>
@@ -11,7 +18,9 @@ export default async function HonorBoardPage() {
         Jogadores destacados, melhores desempenhos, campeões e conquistas.
         Quadro próprio do Kibaúla — não é o Quadro de Honra oficial do INP.
       </p>
-      {entries.length === 0 ? (
+      {entries === null ? (
+        <p className="muted">A carregar…</p>
+      ) : entries.length === 0 ? (
         <p className="panel p-5 text-sm muted">
           O Honor Board será preenchido à medida que a temporada avançar.
         </p>

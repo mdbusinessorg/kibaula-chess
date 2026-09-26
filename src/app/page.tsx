@@ -1,10 +1,16 @@
+'use client';
+
 import Link from 'next/link';
-import { getCourses } from '@/lib/data';
+import { useEffect, useState } from 'react';
+import { getCourses } from '@/lib/queries';
+import type { Course } from '@/lib/types';
 
-export const dynamic = 'force-dynamic';
+export default function Home() {
+  const [courses, setCourses] = useState<Course[]>([]);
+  useEffect(() => {
+    getCourses().then(setCourses).catch(() => setCourses([]));
+  }, []);
 
-export default async function Home() {
-  const courses = await getCourses();
   return (
     <div className="space-y-12">
       <section className="py-10 text-center">
