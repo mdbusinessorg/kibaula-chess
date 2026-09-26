@@ -35,14 +35,14 @@ export default async function Home() {
             <Link
               key={c.slug}
               href={`/ranking?curso=${c.slug}`}
-              className="panel group p-4 transition hover:border-[var(--accent)]"
+              className="panel course-card group p-4 transition hover:border-[var(--accent)]"
             >
               <div className="text-2xl">{c.icon}</div>
               <div className="mt-2 font-semibold uppercase tracking-wide">
                 {c.abbreviation}
               </div>
               <div className="text-sm muted">{c.name}</div>
-              <div className="mt-3 hidden text-xs muted group-hover:block">
+              <div className="course-card-stats mt-3 text-xs muted">
                 <div>{c.players} jogadores · {c.games} partidas</div>
                 <div>Rating médio: {c.avgRating || '—'}</div>
                 <div className="accent">#{c.rank} no Ranking Kibaúla</div>

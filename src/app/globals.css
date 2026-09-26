@@ -45,3 +45,6 @@ input, select {
   padding: 0.5rem 0.75rem;
   color: var(--text);
 }
+
+.course-card-stats { display: none; }
+.course-card:hover .course-card-stats { display: block; }
