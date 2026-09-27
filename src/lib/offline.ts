@@ -132,6 +132,9 @@ export function guestAsPlayer(g: GuestProfile): Player {
   return {
     id: 'guest', fullName: 'Visitante', username: g.username, rating: g.rating,
     wins: g.wins, losses: g.losses, draws: g.draws, puzzlesSolved: g.puzzlesSolved,
+    xp: g.xp,
+    ratingBlitz: g.rating, ratingRapid: g.rating, ratingClassical: g.rating,
+    ratingPuzzle: g.rating,
     status: 'Visitante', inpVerified: false,
     courseId: null, courseName: 'Modo offline', courseAbbr: 'OFF',
     classId: null, className: null, gradeLabel: null, academicYear: null,

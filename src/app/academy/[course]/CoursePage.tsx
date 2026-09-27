@@ -28,9 +28,11 @@ function ExerciseBoard({ lesson, onSolved }: { lesson: Lesson; onSolved: () => v
 
   function tryMove(from: string, to: string, promotion?: string): boolean {
     const want = lesson.solution?.[step];
-    const uci = from + to + (promotion ?? '');
+    // promoção implícita: a solução 'a7a8q' é aceite quando o drop dá 'a7a8'
+    const promo = promotion ?? (want && want.length === 5 && from + to === want.slice(0, 4) ? want[4] : '');
+    const uci = from + to + promo;
     if (want && uci === want) {
-      game.move({ from, to, promotion: promotion ?? 'q' });
+      game.move({ from, to, promotion: promo || 'q' });
       setFen(game.fen());
       sounds.move();
       const next = step + 1;

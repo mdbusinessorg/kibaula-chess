@@ -39,7 +39,7 @@ function PerfilInner() {
         if (s) player = await getMyPlayer(s.userId);
         else {
           const g = getGuest();
-          if (g) { player = guestAsPlayer(g); setIsGuest(true); }
+          if (g) { player = guestAsPlayer(g); setIsGuest(true); setLessons(g.lessons.length); }
         }
       }
       setP(player);

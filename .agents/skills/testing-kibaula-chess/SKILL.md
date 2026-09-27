@@ -36,3 +36,12 @@ fetch(url+'/auth/v1/admin/users',{method:'POST',headers:{apikey:key,Authorizatio
 ## Known quirks
 - react-chessboard move dots render as radial-gradient `backgroundImage` on square divs with `data-square` attributes — verifiable via `document.querySelector('[data-square="e4"]').style.backgroundImage` if pixel confirmation is ambiguous.
 - The "Desafios abertos" lobby may contain stale seeded challenges — "Adversário aleatório" will join one if present.
+
+## v2.0 (INP CHESS rebrand) specifics
+- Guest mode: /login → "Continuar como visitante (offline)" creates `inpchess:guest` in localStorage (`visitante_XXXXX`). AuthGate lets guests everywhere; header shows "Entrar" instead of "Sair".
+- SyncBadge top-center: `📡 Modo offline` / `⟳ Sincronizando…` / `✓ Sincronizado`. To toggle without real network loss, run in the page console: `Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false}); window.dispatchEvent(new Event('offline'))` (and `true`+`online` to restore) — the badge reacts to the events.
+- PuzzleBoard and academy ExerciseBoard are DRAG-ONLY (`onPieceDrop`, no click-to-move). In bot games (`/jogar`) click-to-move also works. Use `zoom` first to get exact square centers — puzzle boards are smaller (~34px/sq) than the bot board (~37px/sq); grabbing near a square edge picks the wrong piece.
+- Puzzle/exercise solutions are UCI strings; promotion moves have a 5th char (`a7a8q`). PuzzleBoard auto-appends `want[4]` so promotion puzzles work; ExerciseBoard does NOT — `ex-end-promo` ("Exercício: coroação" in Finais) was unsolvable when tested.
+- `/batalha` selects initialize from `courses` while it is still `[]`, so state stays `''` — you must change BOTH selects before the comparison renders.
+- Bot promotion bottom-sheet (PromotionSheet) only opens inside `/jogar` bot/live games when a pawn reaches the last rank — hard to reach vs random 500 bot (it punishes pawn marches; got checkmated Qxg3#). Code path: `isPromotion` → `setPromo`.
+- "Nova partida" ghost button on the left panel during bot games can be unresponsive to single clicks — the full-width `Nova partida` button appears reliably after game end.
