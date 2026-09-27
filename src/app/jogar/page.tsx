@@ -8,75 +8,16 @@ import { getSession, getMyPlayer } from '@/lib/auth';
 import type { Player } from '@/lib/types';
 import {
   listLobby, createMatch, joinMatch, postMove, finishMatch, abortMatch,
-  offerDraw, respondDraw,
-  subscribeMatch, subscribeLobby, getMatch, type LiveMatch,
+  offerDraw, respondDraw, listChat, postChat, subscribeChat,
+  subscribeMatch, subscribeLobby, getMatch, type LiveMatch, type ChatMsg,
 } from '@/lib/live';
 import { supabase } from '@/lib/client';
 import { sounds } from '@/lib/sounds';
-
-// ---------- motor do bot ----------
-const VAL: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
-
-function evalBoard(g: Chess): number {
-  let s = 0;
-  for (const row of g.board()) for (const c of row) {
-    if (c) s += VAL[c.type] * (c.color === 'w' ? 1 : -1);
-  }
-  return s;
-}
-
-function negamax(g: Chess, depth: number, alpha: number, beta: number): number {
-  if (depth === 0 || g.isGameOver()) {
-    if (g.isCheckmate()) return -10000;
-    if (g.isDraw() || g.isStalemate()) return 0;
-    return evalBoard(g);
-  }
-  let best = -Infinity;
-  for (const m of g.moves()) {
-    g.move(m);
-    best = Math.max(best, -negamax(g, depth - 1, -beta, -alpha));
-    g.undo();
-    if (best > alpha) alpha = best;
-    if (alpha >= beta) break;
-  }
-  return best;
-}
-
-function bestMove(g: Chess, depth: number): string | null {
-  const moves = g.moves({ verbose: true });
-  if (!moves.length) return null;
-  const sign = g.turn() === 'w' ? 1 : -1;
-  let best = -Infinity;
-  let chosen: string[] = [];
-  for (const m of moves) {
-    g.move(m);
-    const score = -negamax(g, depth - 1, -Infinity, Infinity) * sign;
-    g.undo();
-    if (score > best) { best = score; chosen = [m.lan]; }
-    else if (score === best) chosen.push(m.lan);
-  }
-  return chosen[Math.floor(Math.random() * chosen.length)] ?? null;
-}
-
-/** Força do bot calibrada por rating 500–3000. */
-function botMove(g: Chess, rating: number): string | null {
-  const moves = g.moves({ verbose: true });
-  if (!moves.length) return null;
-  const depth = rating >= 2200 ? 3 : rating >= 1300 ? 2 : 1;
-  const blunder = Math.max(0, (3000 - rating) / 3000) * 0.5;
-  if (depth === 1) {
-    if (Math.random() < blunder) {
-      return moves[Math.floor(Math.random() * moves.length)].lan;
-    }
-    const good = moves.filter((m) => m.captured || m.san.includes('+') || m.san.includes('#'));
-    const pick = good.length ? good : moves;
-    return pick[Math.floor(Math.random() * pick.length)].lan;
-  }
-  if (Math.random() < blunder) {
-    return moves[Math.floor(Math.random() * moves.length)].lan;
-  }
-  return bestMove(g, depth);
-}
+import { botMove, botForRating, classifyMove, BOT_LEVELS } from '@/lib/engine';
+import { coachText, type AnalyzedMove } from '@/lib/analysis';
+import { awardXp, XP, checkAchievements } from '@/lib/gamification';
+import { getGuest, saveGuest, isOnline } from '@/lib/offline';
+import { Sheet, CoachBubble, showToast } from '@/components/ui';
 
 function gameStatus(g: Chess): string {
   if (g.isCheckmate()) return `Xeque-mate — vencem as ${g.turn() === 'w' ? 'pretas' : 'brancas'}`;
@@ -92,17 +33,24 @@ function fmtClock(s: number): string {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 }
 
-// ---------- pontinhos de movimentos legais ----------
 const DOT_BG = 'radial-gradient(circle, rgba(0,0,0,.4) 20%, transparent 23%)';
 const CAPTURE_RING = 'radial-gradient(circle, transparent 58%, rgba(239,68,68,.85) 62%, rgba(239,68,68,.85) 66%, transparent 70%)';
+const CHECK_GLOW = 'radial-gradient(circle, rgba(239,68,68,.75) 30%, rgba(239,68,68,.25) 60%, transparent 75%)';
+
+function kingSquare(g: Chess, color: 'w' | 'b'): string | null {
+  const b = g.board();
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    const p = b[r][c];
+    if (p && p.type === 'k' && p.color === color) return `${'abcdefgh'[c]}${8 - r}`;
+  }
+  return null;
+}
 
 function useHints(game: Chess, canMove: boolean, tryMove: (from: string, to: string) => boolean) {
   const [selected, setSelected] = useState<string | null>(null);
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
 
-  const targets = selected
-    ? game.moves({ square: selected as Square, verbose: true })
-    : [];
+  const targets = selected ? game.moves({ square: selected as Square, verbose: true }) : [];
 
   const styles: Record<string, CSSProperties> = {};
   if (selected) {
@@ -115,8 +63,12 @@ function useHints(game: Chess, canMove: boolean, tryMove: (from: string, to: str
   }
   if (lastMove) {
     for (const s of [lastMove.from, lastMove.to]) {
-      styles[s] = { ...(styles[s] ?? {}), backgroundColor: 'rgba(250,204,21,.22)' };
+      styles[s] = { ...(styles[s] ?? {}), backgroundColor: 'rgba(250,204,21,.25)' };
     }
+  }
+  if (game.inCheck()) {
+    const k = kingSquare(game, game.turn());
+    if (k) styles[k] = { ...(styles[k] ?? {}), backgroundImage: CHECK_GLOW, backgroundSize: '100% 100%' };
   }
 
   function onSquareClick({ piece, square }: { piece: unknown; square: string }) {
@@ -138,11 +90,12 @@ function useHints(game: Chess, canMove: boolean, tryMove: (from: string, to: str
   return { squareStyles: styles, onSquareClick, markMove, clear: () => setSelected(null) };
 }
 
-// tabuleiro junto, sem espaços entre casas — cores próprias roxas
 const BOARD_OPTS = {
   lightSquareStyle: { backgroundColor: '#ede3f7' },
   darkSquareStyle: { backgroundColor: '#8a5fc0' },
   boardStyle: { borderRadius: '0.5rem', overflow: 'hidden' },
+  animationDurationInMs: 220,
+  showAnimations: true,
 } as const;
 
 const TIME_CONTROLS: { label: string; seconds: number | null }[] = [
@@ -153,26 +106,49 @@ const TIME_CONTROLS: { label: string; seconds: number | null }[] = [
   { label: 'Clássica · 30 min', seconds: 1800 },
 ];
 
-// ---------- cartão de jogador com relógio ----------
-function PlayerCard({ name, rating, clock, active }: {
-  name: string; rating?: number; clock: number | null; active: boolean;
+function PlayerCard({ name, rating, clock, active, icon }: {
+  name: string; rating?: number; clock: number | null; active: boolean; icon?: string;
 }) {
   return (
     <div className={`panel flex items-center justify-between p-3 ${active ? 'ring-1 ring-[var(--accent)]' : ''}`}>
       <div className="flex items-center gap-3">
-        <span className="tile-icon !h-10 !w-10 text-lg">👤</span>
+        <span className="tile-icon !h-10 !w-10 text-lg">{icon ?? '👤'}</span>
         <div>
           <div className="text-sm font-semibold">{name}</div>
           {rating != null && <div className="text-xs muted">Rating {rating}</div>}
         </div>
       </div>
       {clock != null && (
-        <span className={`rounded-lg px-3 py-1 font-mono text-lg font-bold ${active ? 'bg-[var(--accent)] text-black' : 'bg-black/40'}`}>
+        <span className={`rounded-lg px-3 py-1 font-mono text-lg font-bold ${active ? 'bg-[var(--accent)] text-white' : 'bg-black/40'}`}>
           {fmtClock(clock)}
         </span>
       )}
     </div>
   );
+}
+
+/** Escolha da peça de promoção (sheet estilo iOS). */
+function PromotionSheet({ open, onPick, onCancel, color }: {
+  open: boolean; onPick: (p: 'q' | 'r' | 'b' | 'n') => void; onCancel: () => void; color: 'w' | 'b';
+}) {
+  const pieces = color === 'w'
+    ? [['q', '♕'], ['r', '♖'], ['b', '♗'], ['n', '♘']] as const
+    : [['q', '♛'], ['r', '♜'], ['b', '♝'], ['n', '♞']] as const;
+  return (
+    <Sheet open={open} onClose={onCancel} title="Promover para">
+      <div className="promo-row">
+        {pieces.map(([p, icon]) => (
+          <button key={p} className="promo-btn" onClick={() => onPick(p)}>{icon}</button>
+        ))}
+      </div>
+    </Sheet>
+  );
+}
+
+/** É promoção? (peão a chegar à última fila) */
+function isPromotion(g: Chess, from: string, to: string): boolean {
+  return g.moves({ square: from as Square, verbose: true })
+    .some((m) => m.to === to && !!m.promotion);
 }
 
 // ---------- jogo contra o bot ----------
@@ -184,18 +160,19 @@ function BotGame({ player, botRating, color, onExit }: {
   const [status, setStatus] = useState(gameStatus(game));
   const [over, setOver] = useState(false);
   const [log, setLog] = useState<{ san: string; t: number }[]>([]);
+  const [coach, setCoach] = useState<AnalyzedMove | null>(null);
+  const [promo, setPromo] = useState<{ from: string; to: string } | null>(null);
   const lastMoveAt = useRef(0);
   const markMoveRef = useRef<(f: string, t: string) => void>(() => {});
+  const isGuest = player.id === 'guest';
+  const bot = botForRating(botRating);
 
-  const afterMove = useCallback((g: Chess) => {
+  const afterMove = useCallback((g: Chess, playerMove?: { uci: string; fenBefore: string }) => {
     setFen(g.fen());
     const now = Date.now();
     const elapsed = lastMoveAt.current ? (now - lastMoveAt.current) / 1000 : 0;
     lastMoveAt.current = now;
-    setLog((prev) => g.history().map((san, i) => ({
-      san, t: i < prev.length ? prev[i].t : elapsed,
-    })));
-    // som da jogada
+    setLog((prev) => g.history().map((san, i) => ({ san, t: i < prev.length ? prev[i].t : elapsed })));
     const last = g.history({ verbose: true }).at(-1);
     if (last) {
       if (last.captured) sounds.capture(); else sounds.move();
@@ -203,28 +180,60 @@ function BotGame({ player, botRating, color, onExit }: {
       markMoveRef.current(last.from, last.to);
     }
     setStatus(gameStatus(g));
+
+    // coach bubble: classifica a jogada do jogador (local, offline-ok)
+    if (playerMove) {
+      const { cls, swing, evalAfter, best } = classifyMove(playerMove.fenBefore, playerMove.uci, 1);
+      setCoach({
+        ply: g.history().length, san: last?.san ?? '', uci: playerMove.uci,
+        byWhite: color === 'w', cls, swing, evalAfter, best, fenBefore: playerMove.fenBefore,
+      });
+    }
+
     if (g.isGameOver()) {
       setOver(true);
       const res = g.isCheckmate() ? (g.turn() === 'w' ? '0-1' : '1-0') : '1/2-1/2';
       const mine = (res === '1-0' && color === 'w') || (res === '0-1' && color === 'b');
       if (g.isCheckmate() && mine) sounds.win(); else sounds.end();
-      supabase.from('players').select('wins,losses,draws,rating').eq('id', player.id).single()
-        .then(({ data }) => {
-          if (!data) return;
-          const f = g.isCheckmate() ? (mine ? 'wins' : 'losses') : 'draws';
-          supabase.from('players').update({ [f]: (data[f] as number) + 1 }).eq('id', player.id);
-        });
-    }
-  }, [color, player.id]);
 
-  function tryMove(from: string, to: string): boolean {
+      if (isGuest) {
+        const g2 = getGuest();
+        if (g2) {
+          if (g.isCheckmate()) { if (mine) g2.wins++; else g2.losses++; } else g2.draws++;
+          g2.xp += XP.gamePlayed + (mine ? XP.win : res === '1/2-1/2' ? XP.draw : 0);
+          saveGuest(g2);
+        }
+      } else {
+        const amount = XP.gamePlayed + (mine ? XP.win : res === '1/2-1/2' ? XP.draw : 0);
+        void awardXp(player.id, amount);
+        const f = g.isCheckmate() ? (mine ? 'wins' : 'losses') : 'draws';
+        supabase.from('players').select('wins,losses,draws').eq('id', player.id).single()
+          .then(({ data }) => {
+            if (!data) return;
+            const next = { ...data, [f]: (data[f] as number) + 1 };
+            supabase.from('players').update({ [f]: next[f] }).eq('id', player.id).then(() => {
+              void checkAchievements(player.id, {
+                wins: next.wins, games: next.wins + next.losses + next.draws,
+                puzzles: 0, streak: 0, level: 1,
+              }).then((got) => got.length && showToast(`🏅 Conquista desbloqueada!`));
+            });
+          });
+      }
+    }
+  }, [color, player.id, isGuest]);
+
+  function tryMove(from: string, to: string, promotion?: string): boolean {
     const g = game;
     if (g.isGameOver() || g.turn() !== color) return false;
+    if (!promotion && isPromotion(g, from, to)) { setPromo({ from, to }); return true; }
+    const fenBefore = g.fen();
+    let uci: string;
     try {
-      const m = g.move({ from, to, promotion: 'q' });
+      const m = g.move({ from, to, promotion: promotion ?? 'q' });
       if (!m) { sounds.illegal(); return false; }
+      uci = m.lan;
     } catch { sounds.illegal(); return false; }
-    afterMove(g);
+    afterMove(g, { uci, fenBefore });
     setTimeout(() => {
       const mv = botMove(g, botRating);
       if (mv && !g.isGameOver()) { g.move(mv); afterMove(g); }
@@ -255,26 +264,31 @@ function BotGame({ player, botRating, color, onExit }: {
   return (
     <div className="grid gap-5 md:grid-cols-[1fr_280px]">
       <div className="mx-auto w-full max-w-[460px] space-y-3">
-        <PlayerCard name={`Bot Kibaúla`} rating={botRating} clock={null} active={game.turn() !== color && !over} />
-        <Chessboard options={{
-          position: fen,
-          boardOrientation: color === 'w' ? 'white' : 'black',
-          onPieceDrop: onDrop,
-          onSquareClick: hints.onSquareClick,
-          squareStyles: hints.squareStyles,
-          allowDragging: !over,
-          ...BOARD_OPTS,
-        }} />
-        <PlayerCard name={player.username} rating={player.rating} clock={null} active={game.turn() === color && !over} />
+        <PlayerCard name={bot.name} rating={bot.rating} clock={null}
+          active={game.turn() !== color && !over} icon={bot.icon} />
+        <div className="chessboard-wrap">
+          <Chessboard options={{
+            position: fen,
+            boardOrientation: color === 'w' ? 'white' : 'black',
+            onPieceDrop: onDrop,
+            onSquareClick: hints.onSquareClick,
+            squareStyles: hints.squareStyles,
+            allowDragging: !over,
+            ...BOARD_OPTS,
+          }} />
+        </div>
+        <PlayerCard name={player.username} rating={player.rating} clock={null}
+          active={game.turn() === color && !over} />
       </div>
       <div className="space-y-3">
         <div className="panel p-4 text-sm">
           <p className="muted">{status}</p>
-          <p className="mt-1 text-xs muted">Bot nível {botRating} · tu jogas de {color === 'w' ? 'brancas' : 'pretas'}</p>
+          <p className="mt-1 text-xs muted">
+            {bot.icon} {bot.name} ({bot.rating}) · {bot.desc} · jogas de {color === 'w' ? 'brancas' : 'pretas'}
+          </p>
         </div>
-        <div className="flex gap-2">
-          <button className="btn-ghost flex-1 text-sm" onClick={onExit}>← Nova partida</button>
-        </div>
+        {coach && <CoachBubble cls={coach.cls} text={coachText(coach, bot.name)} />}
+        <button className="btn-ghost w-full text-sm" onClick={onExit}>← Nova partida</button>
         <div className="panel max-h-64 overflow-y-auto p-4 text-xs">
           {log.length ? log.map((m, i) => (
             <span key={i} className="muted">
@@ -285,6 +299,12 @@ function BotGame({ player, botRating, color, onExit }: {
         </div>
         {over && <button className="btn w-full text-sm" onClick={onExit}>Nova partida</button>}
       </div>
+      <PromotionSheet open={!!promo} color={color}
+        onCancel={() => setPromo(null)}
+        onPick={(p) => {
+          const t = promo; setPromo(null);
+          if (t) tryMove(t.from, t.to, p);
+        }} />
     </div>
   );
 }
@@ -298,16 +318,24 @@ function LiveGame({ matchId, me, onExit }: { matchId: string; me: Player; onExit
   const [applied, setApplied] = useState(0);
   const [match, setMatch] = useState<LiveMatch | null>(null);
   const [moves, setMoves] = useState<TimedMove[]>([]);
+  const [chat, setChat] = useState<ChatMsg[]>([]);
+  const [chatText, setChatText] = useState('');
+  const [promo, setPromo] = useState<{ from: string; to: string } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [, setTick] = useState(0);
   const lastPly = useRef(0);
   const startedRef = useRef(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const myColor: 'w' | 'b' | null = !match ? null
     : match.whitePlayerId === me.id ? 'w'
     : match.blackPlayerId === me.id ? 'b' : null;
   const active = match?.status === 'active';
   const myTurn = active && !!myColor && game.turn() === myColor;
+
+  const reloadChat = useCallback(() => {
+    listChat(matchId).then(setChat).catch(() => {});
+  }, [matchId]);
 
   const rebuild = useCallback(async () => {
     const { data } = await supabase.from('live_moves')
@@ -322,7 +350,6 @@ function LiveGame({ matchId, me, onExit }: { matchId: string; me: Player; onExit
     setMoves((data ?? []).map((m) => ({
       ply: m.ply, san: m.san, uci: m.uci, playedAt: new Date(m.played_at).getTime(),
     })));
-    // som quando chega jogada nova (do adversário via realtime)
     const count = data?.length ?? 0;
     if (count > lastPly.current) {
       const last = g.history({ verbose: true }).at(-1);
@@ -335,26 +362,24 @@ function LiveGame({ matchId, me, onExit }: { matchId: string; me: Player; onExit
   }, [matchId, game]);
 
   useEffect(() => {
-    const t = setTimeout(() => { getMatch(matchId).then(setMatch); rebuild(); });
+    const t = setTimeout(() => { getMatch(matchId).then(setMatch); rebuild(); reloadChat(); });
     const iv = setInterval(() => setTick((x) => x + 1), 1000);
-    const unsub = subscribeMatch(
-      matchId,
-      () => { rebuild(); },
-      (u) => {
-        setMatch((m) => m ? {
-          ...m,
-          status: u.status as LiveMatch['status'],
-          result: u.result as LiveMatch['result'],
-          endReason: u.end_reason,
-          drawOfferedBy: u.draw_offered_by,
-          blackPlayerId: u.black_player_id ?? m.blackPlayerId,
-        } : m);
-      },
-    );
-    return () => { clearTimeout(t); clearInterval(iv); unsub(); };
-  }, [matchId, rebuild]);
+    const unsub = subscribeMatch(matchId, () => { rebuild(); }, (u) => {
+      setMatch((m) => m ? {
+        ...m,
+        status: u.status as LiveMatch['status'],
+        result: u.result as LiveMatch['result'],
+        endReason: u.end_reason,
+        drawOfferedBy: u.draw_offered_by,
+        blackPlayerId: u.black_player_id ?? m.blackPlayerId,
+      } : m);
+    });
+    const unsubChat = subscribeChat(matchId, reloadChat);
+    return () => { clearTimeout(t); clearInterval(iv); unsub(); unsubChat(); };
+  }, [matchId, rebuild, reloadChat]);
 
-  // relógios: tempo restante por lado
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ block: 'nearest' }); }, [chat.length]);
+
   function clockFor(side: 'w' | 'b'): number | null {
     const base = match?.timeControlSeconds;
     if (!match || base == null) return null;
@@ -370,7 +395,6 @@ function LiveGame({ matchId, me, onExit }: { matchId: string; me: Player; onExit
     return base - spent;
   }
 
-  // som de início + queda de bandeira + tick final
   useEffect(() => {
     if (active && !startedRef.current) { startedRef.current = true; sounds.start(); }
     if (!active || match?.timeControlSeconds == null || !moves.length) return;
@@ -382,11 +406,12 @@ function LiveGame({ matchId, me, onExit }: { matchId: string; me: Player; onExit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moves, active, match?.timeControlSeconds, fen]);
 
-  function tryMove(from: string, to: string): boolean {
+  function tryMove(from: string, to: string, promotion?: string): boolean {
     if (!myTurn) return false;
+    if (!promotion && isPromotion(game, from, to)) { setPromo({ from, to }); return true; }
     let mv;
     try {
-      mv = game.move({ from, to, promotion: 'q' });
+      mv = game.move({ from, to, promotion: promotion ?? 'q' });
       if (!mv) { sounds.illegal(); return false; }
     } catch { sounds.illegal(); return false; }
     const ply = applied + 1;
@@ -400,6 +425,7 @@ function LiveGame({ matchId, me, onExit }: { matchId: string; me: Player; onExit
         else if (game.isStalemate()) finishMatch(matchId, '1/2-1/2', 'stalemate');
         else if (game.isInsufficientMaterial()) finishMatch(matchId, '1/2-1/2', 'insufficient_material');
         else if (game.isThreefoldRepetition() || game.isDraw()) finishMatch(matchId, '1/2-1/2', 'draw');
+        void awardXp(me.id, XP.gamePlayed);
       })
       .catch((e) => setErr(e.message));
     return true;
@@ -410,6 +436,14 @@ function LiveGame({ matchId, me, onExit }: { matchId: string; me: Player; onExit
   function onDrop({ sourceSquare, targetSquare }: { piece: unknown; sourceSquare: string; targetSquare: string | null }) {
     if (!targetSquare) return false;
     return tryMove(sourceSquare, targetSquare);
+  }
+
+  function sendChat(e: React.FormEvent) {
+    e.preventDefault();
+    const t = chatText.trim();
+    if (!t) return;
+    setChatText('');
+    postChat(matchId, me.id, t).then(reloadChat).catch(() => setChatText(t));
   }
 
   if (!match) return <p className="muted py-10 text-center">A carregar partida…</p>;
@@ -425,27 +459,21 @@ function LiveGame({ matchId, me, onExit }: { matchId: string; me: Player; onExit
   return (
     <div className="grid gap-5 md:grid-cols-[1fr_280px]">
       <div className="mx-auto w-full max-w-[460px] space-y-3">
-        <PlayerCard
-          name={oppName ?? 'A aguardar adversário…'}
-          rating={oppRating}
-          clock={clockFor(oppColor)}
-          active={!!active && game.turn() === oppColor}
-        />
-        <Chessboard options={{
-          position: fen,
-          boardOrientation: myColor === 'b' ? 'black' : 'white',
-          onPieceDrop: onDrop,
-          onSquareClick: hints.onSquareClick,
-          squareStyles: hints.squareStyles,
-          allowDragging: !!myTurn,
-          ...BOARD_OPTS,
-        }} />
-        <PlayerCard
-          name={me.username}
-          rating={me.rating}
-          clock={clockFor(myColor ?? 'w')}
-          active={!!myTurn}
-        />
+        <PlayerCard name={oppName ?? 'A aguardar adversário…'} rating={oppRating}
+          clock={clockFor(oppColor)} active={!!active && game.turn() === oppColor} />
+        <div className="chessboard-wrap">
+          <Chessboard options={{
+            position: fen,
+            boardOrientation: myColor === 'b' ? 'black' : 'white',
+            onPieceDrop: onDrop,
+            onSquareClick: hints.onSquareClick,
+            squareStyles: hints.squareStyles,
+            allowDragging: !!myTurn,
+            ...BOARD_OPTS,
+          }} />
+        </div>
+        <PlayerCard name={me.username} rating={me.rating}
+          clock={clockFor(myColor ?? 'w')} active={!!myTurn} />
         {active && (
           <div className="grid grid-cols-3 gap-2">
             {drawFromOpp ? (
@@ -462,7 +490,7 @@ function LiveGame({ matchId, me, onExit }: { matchId: string; me: Player; onExit
             <button className="btn-ghost text-sm" onClick={() => {
               if (myColor) finishMatch(matchId, myColor === 'w' ? '0-1' : '1-0', 'resign');
             }}>🏳 Desistir</button>
-            <button className="btn-ghost text-sm" onClick={onExit}>⋯ Mais</button>
+            <a className="btn-ghost text-sm text-center" href={`/analise?m=${matchId}`}>🔍 Análise</a>
           </div>
         )}
       </div>
@@ -492,52 +520,82 @@ function LiveGame({ matchId, me, onExit }: { matchId: string; me: Player; onExit
             </button>
           </div>
         )}
-        <div className="panel max-h-64 overflow-y-auto p-4 text-xs">
+        <div className="panel max-h-48 overflow-y-auto p-4 text-xs">
           {moves.length ? moves.map((m, i) => {
-            const prev = i === 0 ? (moves[0].playedAt) : moves[i - 1].playedAt;
+            const prev = i === 0 ? moves[0].playedAt : moves[i - 1].playedAt;
             const dt = i === 0 ? 0 : (m.playedAt - prev) / 1000;
             return (
               <span key={m.ply} className="muted">
-                {i % 2 === 0 ? `${m.ply / 2 + 0.5 | 0}. ` : ''}
+                {i % 2 === 0 ? `${Math.floor(m.ply / 2 + 0.5)}. ` : ''}
                 <span className="text-[var(--text)]">{m.san}</span>
                 <span className="ml-1 text-[10px]">{dt ? `+${fmtClock(dt)}` : ''}</span>{' '}
               </span>
             );
           }) : <span className="muted">Sem jogadas ainda.</span>}
         </div>
+
+        {/* chat da partida */}
+        <div className="panel p-3 text-xs">
+          <div className="mb-1 font-semibold text-sm">💬 Chat</div>
+          <div className="mb-2 max-h-32 space-y-1 overflow-y-auto">
+            {chat.length ? chat.map((c) => (
+              <p key={c.id} className={c.playerId === me.id ? 'text-[var(--accent)]' : ''}>
+                <span className="muted">{c.author.split(' ')[0]}:</span> {c.body}
+              </p>
+            )) : <p className="muted">Diz olá ao teu adversário 👋</p>}
+            <div ref={chatEndRef} />
+          </div>
+          <form onSubmit={sendChat} className="flex gap-2">
+            <input className="input flex-1 !py-1 text-xs" placeholder="Mensagem…"
+              value={chatText} onChange={(e) => setChatText(e.target.value)} maxLength={300} />
+            <button className="btn !px-3 !py-1 text-xs">➤</button>
+          </form>
+        </div>
+
         {!active && match.status !== 'waiting' && (
           <button className="btn w-full text-sm" onClick={onExit}>← Voltar</button>
         )}
       </div>
+      <PromotionSheet open={!!promo} color={myColor ?? 'w'}
+        onCancel={() => setPromo(null)}
+        onPick={(p) => {
+          const t = promo; setPromo(null);
+          if (t) tryMove(t.from, t.to, p);
+        }} />
     </div>
   );
 }
 
-// ---------- ecrã Nova Partida (mockup) ----------
+// ---------- ecrã Nova Partida ----------
 function NewGame({ me, onBot, onLive }: {
   me: Player;
   onBot: (rating: number, color: 'w' | 'b') => void;
   onLive: (id: string) => void;
 }) {
-  const [mode, setMode] = useState<'online' | 'bot'>('online');
+  const [mode, setMode] = useState<'online' | 'bot'>('bot');
   const [botRating, setBotRating] = useState(1200);
   const [color, setColor] = useState<'w' | 'b'>('w');
-  const [tc, setTc] = useState<number | null>(1800);
+  const [tc, setTc] = useState<number | null>(600);
   const [rated, setRated] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [invite, setInvite] = useState<string | null>(null);
   const [lobby, setLobby] = useState<{ open: LiveMatch[]; mine: LiveMatch[] }>({ open: [], mine: [] });
+  const isGuest = me.id === 'guest';
+  const online = isOnline();
+
+  const bot = botForRating(botRating);
 
   const reload = useCallback(() => {
+    if (isGuest) return;
     listLobby(me.id).then(setLobby).catch(() => {});
-  }, [me.id]);
+  }, [me.id, isGuest]);
 
   useEffect(() => {
     const t = setTimeout(reload);
-    const unsub = subscribeLobby(reload);
+    const unsub = isGuest ? () => {} : subscribeLobby(reload);
     return () => { clearTimeout(t); unsub(); };
-  }, [reload]);
+  }, [reload, isGuest]);
 
   async function inviteFriend() {
     setBusy(true); setErr(null);
@@ -567,23 +625,36 @@ function NewGame({ me, onBot, onLive }: {
     <div className="mx-auto max-w-[560px] space-y-6">
       <h1 className="text-2xl font-bold">Nova partida</h1>
 
-      {/* modo */}
       <div className="grid grid-cols-2 gap-3">
-        {([['online', '🌐 Online', 'Contra outro jogador'], ['bot', '🤖 Bot', 'Treino offline']] as const).map(([k, t, s]) => (
+        {([['online', '🌐 Online', 'Contra outro jogador'], ['bot', '🤖 Bot', 'Treino — também offline']] as const).map(([k, t, s]) => (
           <button key={k} onClick={() => setMode(k)}
-            className={`tile p-4 text-left ${mode === k ? 'ring-2 ring-[var(--accent)]' : ''}`}>
+            className={`tile p-4 text-left ${mode === k ? 'ring-2 ring-[var(--accent)]' : ''} ${k === 'online' && (isGuest || !online) ? 'opacity-40' : ''}`}>
             <div className="font-semibold">{t}</div>
             <div className="text-xs muted">{s}</div>
           </button>
         ))}
       </div>
+      {mode === 'online' && isGuest && (
+        <p className="text-xs text-amber-400">Partidas online precisam de conta — entra ou cria conta.</p>
+      )}
 
       {mode === 'bot' && (
         <div className="panel space-y-4 p-5">
+          {/* níveis nomeados */}
+          <div className="grid grid-cols-4 gap-2">
+            {BOT_LEVELS.map((b) => (
+              <button key={b.rating} onClick={() => setBotRating(b.rating)}
+                className={`rounded-lg border p-2 text-center text-xs ${botRating === b.rating ? 'border-[var(--accent)] bg-[var(--accent)]/10' : 'border-[var(--border)]'}`}>
+                <div className="text-lg">{b.icon}</div>
+                <div className="font-semibold">{b.name}</div>
+                <div className="muted text-[10px]">{b.rating}</div>
+              </button>
+            ))}
+          </div>
           <div>
             <div className="mb-1 flex items-center justify-between text-sm">
               <span className="muted">Força do bot</span>
-              <span className="chip gold font-bold">{botRating}</span>
+              <span className="chip gold font-bold">{bot.icon} {bot.name} · {botRating}</span>
             </div>
             <input type="range" min={500} max={3000} step={100} value={botRating}
               onChange={(e) => setBotRating(+e.target.value)} className="w-full accent-[#a855f7]" />
@@ -605,7 +676,7 @@ function NewGame({ me, onBot, onLive }: {
         </div>
       )}
 
-      {mode === 'online' && (
+      {mode === 'online' && !isGuest && (
         <div className="panel space-y-5 p-5">
           <div>
             <div className="mb-2 text-sm muted">Controlo de tempo</div>
@@ -641,8 +712,7 @@ function NewGame({ me, onBot, onLive }: {
         </div>
       )}
 
-      {/* lobby */}
-      {mode === 'online' && (
+      {mode === 'online' && !isGuest && (
         <div className="space-y-4">
           {lobby.open.length > 0 && (
             <div>
@@ -699,7 +769,14 @@ function JogarInner() {
   useEffect(() => {
     const t = setTimeout(async () => {
       const s = await getSession();
-      if (!s) return;
+      if (!s) {
+        const g = getGuest();
+        if (g) {
+          const { guestAsPlayer } = await import('@/lib/offline');
+          setMe(guestAsPlayer(g));
+        }
+        return;
+      }
       const p = await getMyPlayer(s.userId);
       setMe(p);
       if (!p) return;
@@ -719,16 +796,20 @@ function JogarInner() {
     return () => clearTimeout(t);
   }, [params]);
 
-  if (!me) return <p className="muted py-10 text-center">A carregar…</p>;
+  if (!me) {
+    return (
+      <div className="py-10 text-center">
+        <p className="muted mb-4">Entra ou continua como visitante para jogar.</p>
+      </div>
+    );
+  }
 
   return (
     <div>
       {view === 'new' && (
-        <NewGame
-          me={me}
+        <NewGame me={me}
           onBot={(rating, c) => { setBotCfg({ rating, color: c }); setView('bot'); }}
-          onLive={(id) => { setMatchId(id); setView('live'); }}
-        />
+          onLive={(id) => { setMatchId(id); setView('live'); }} />
       )}
       {view === 'bot' && (
         <BotGame player={me} botRating={botCfg.rating} color={botCfg.color}

@@ -104,18 +104,64 @@ export async function finishMatch(
     .eq('id', matchId);
   const m = await getMatch(matchId);
   if (!m?.whitePlayerId || !m.blackPlayerId || !m.rated) return;
+
+  // rating separado por controlo de tempo (validado no backend)
+  const ratingField = m.timeControlSeconds == null ? 'rating'
+    : m.timeControlSeconds <= 180 ? 'rating_blitz'
+    : m.timeControlSeconds <= 900 ? 'rating_rapid' : 'rating_classical';
+
   const bump = async (pid: string, field: 'wins' | 'losses' | 'draws', elo: number) => {
     const { data } = await supabase.from('players')
-      .select('wins,losses,draws,rating').eq('id', pid).single();
+      .select(`wins,losses,draws,rating,${ratingField}`).eq('id', pid).single();
     if (!data) return;
+    const row = data as Record<string, number>;
+    const cur = row[ratingField] ?? row.rating;
+    const next = Math.max(100, cur + elo);
     await supabase.from('players').update({
-      [field]: (data[field] as number) + 1,
-      rating: Math.max(100, (data.rating as number) + elo),
+      [field]: row[field] + 1,
+      rating: Math.max(100, row.rating + elo),
+      [ratingField]: next,
     }).eq('id', pid);
+    await supabase.from('rating_history')
+      .insert({ player_id: pid, match_id: matchId, kind: ratingField, rating: next });
   };
   if (result === '1-0') { await bump(m.whitePlayerId, 'wins', 15); await bump(m.blackPlayerId, 'losses', -15); }
   if (result === '0-1') { await bump(m.blackPlayerId, 'wins', 15); await bump(m.whitePlayerId, 'losses', -15); }
   if (result === '1/2-1/2') { await bump(m.whitePlayerId, 'draws', 0); await bump(m.blackPlayerId, 'draws', 0); }
+}
+
+export async function listMoves(matchId: string) {
+  const { data } = await supabase.from('live_moves')
+    .select('ply,san,uci,fen_after,played_by,played_at')
+    .eq('match_id', matchId).order('ply', { ascending: true });
+  return data ?? [];
+}
+
+// ---------- chat da partida ----------
+export type ChatMsg = { id: string; playerId: string; author: string; body: string; at: string };
+
+export async function listChat(matchId: string): Promise<ChatMsg[]> {
+  const { data } = await supabase.from('match_chat')
+    .select('id,player_id,body,created_at,players(full_name)')
+    .eq('match_id', matchId).order('created_at', { ascending: true }).limit(100);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((r: any) => ({
+    id: r.id, playerId: r.player_id, body: r.body,
+    author: r.players?.full_name ?? 'Jogador', at: r.created_at,
+  }));
+}
+
+export async function postChat(matchId: string, playerId: string, body: string) {
+  const text = body.trim().slice(0, 300);
+  if (!text) return;
+  await supabase.from('match_chat').insert({ match_id: matchId, player_id: playerId, body: text });
+}
+
+export function subscribeChat(matchId: string, onMsg: () => void) {
+  const ch = supabase.channel(`chat:${matchId}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'match_chat', filter: `match_id=eq.${matchId}` }, onMsg)
+    .subscribe();
+  return () => { supabase.removeChannel(ch); };
 }
 
 export async function offerDraw(matchId: string, playerId: string) {

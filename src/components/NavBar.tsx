@@ -9,20 +9,25 @@ import type { Player } from '@/lib/types';
 const TABS = [
   ['Início', '/', '🏠'],
   ['Jogar', '/jogar', '♞'],
-  ['Academy', '/academy', '📖'],
-  ['Ranking', '/ranking', '🏆'],
+  ['Treinar', '/treinar', '🎯'],
+  ['Puzzles', '/puzzles', '🧩'],
   ['Perfil', '/perfil', '👤'],
 ] as const;
 
 const MORE = [
+  ['Academy', '/academy'],
+  ['Ranking', '/ranking'],
+  ['Torneios', '/torneios'],
+  ['Análise', '/analise'],
   ['Batalha dos Cursos', '/batalha'],
   ['Temporadas', '/temporadas'],
-  ['Torneios', '/torneios'],
   ['Comunidade', '/comunidade'],
   ['Honor Board', '/honor-board'],
   ['Insights', '/insights'],
   ['Admin', '/admin'],
 ] as const;
+
+const PUBLIC_PATHS = ['/login', '/recuperar', '/redefinir-senha'];
 
 export default function NavBar() {
   const pathname = usePathname();
@@ -47,14 +52,14 @@ export default function NavBar() {
     return () => { cancelled = true; unsub(); };
   }, [pathname]);
 
-  if (pathname === '/login') return null;
+  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) return null;
 
   return (
     <>
       <header className="top-bar">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
           <Link href="/" className="text-lg font-extrabold tracking-tight">
-            ♞ Kibaúla<span className="accent">Chess</span>
+            ♞ INP <span className="accent">CHESS</span>
           </Link>
           <div className="ml-auto flex items-center gap-3 text-sm">
             {authed && player && (

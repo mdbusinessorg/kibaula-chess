@@ -32,6 +32,14 @@ export type Player = {
   className: string | null;
   gradeLabel: string | null;
   academicYear: string | null;
+  xp?: number;
+  level?: number;
+  streakDays?: number;
+  ratingBlitz?: number;
+  ratingRapid?: number;
+  ratingClassical?: number;
+  ratingPuzzle?: number;
+  avatarUrl?: string | null;
 };
 
 export type ClassUnit = {

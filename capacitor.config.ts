@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'ao.inp.kibaula',
-  appName: 'Kibaúla Chess',
+  appName: 'INP CHESS',
   webDir: 'out',
   android: { allowMixedContent: true },
 };

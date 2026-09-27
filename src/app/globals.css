@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Kibaúla Chess — tema escuro roxo próprio */
+/* INP CHESS — tema escuro roxo próprio */
 :root {
   --bg: #12081f;
   --panel: #1e1130;
@@ -144,3 +144,121 @@ tr { border-bottom: 1px solid var(--border); }
 .rating-badge .rb-icon { font-size: 1rem; }
 .rating-badge .rb-value { font-weight: 800; font-size: .95rem; }
 .rating-badge .rb-label { font-size: .6rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+
+/* ---------- INP CHESS: componentes ---------- */
+
+/* tabuleiro sempre perfeitamente quadrado */
+.chessboard-wrap { width: 100%; aspect-ratio: 1 / 1; }
+.chessboard-wrap > div { width: 100% !important; height: 100% !important; }
+
+/* indicador de ligação */
+.sync-badge {
+  position: fixed; top: calc(env(safe-area-inset-top, 0px) + .6rem); left: 50%;
+  transform: translateX(-50%); z-index: 90;
+  padding: .3rem .85rem; border-radius: 999px; font-size: .75rem; font-weight: 700;
+  animation: fade-slide .25s ease;
+  backdrop-filter: blur(6px);
+}
+.sync-badge.offline { background: rgba(60,38,88,.92); color: var(--gold); border: 1px solid var(--gold); }
+.sync-badge.syncing { background: rgba(124,58,237,.9); color: #fff; }
+.sync-badge.online { background: rgba(38,194,163,.9); color: #fff; }
+@keyframes fade-slide { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* toast */
+.toast {
+  position: fixed; bottom: 5.5rem; left: 50%; transform: translateX(-50%); z-index: 95;
+  background: var(--panel-2); border: 1px solid var(--accent); color: var(--text);
+  padding: .6rem 1rem; border-radius: .6rem; font-size: .85rem; font-weight: 600;
+  box-shadow: 0 6px 24px rgba(0,0,0,.5);
+  animation: toast-in .2s ease;
+}
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* sheet / modal estilo iOS */
+.sheet-backdrop {
+  position: fixed; inset: 0; z-index: 80;
+  background: rgba(0,0,0,.55);
+  display: flex; align-items: flex-end; justify-content: center;
+  animation: fade-in .15s ease;
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.sheet {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 1rem 1rem 0 0; width: 100%; max-width: 30rem;
+  max-height: 82vh; overflow-y: auto;
+  animation: sheet-up .25s cubic-bezier(.32,.72,.35,1);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.sheet-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .9rem 1rem; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--panel);
+}
+.sheet-close { background: none; border: none; color: var(--muted); font-size: 1.1rem; cursor: pointer; }
+.sheet-body { padding: 1rem; }
+
+/* barra de progresso */
+.pbar { background: var(--panel-2); border-radius: 999px; height: .45rem; overflow: hidden; }
+.pbar-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width .4s ease; }
+.xp-chip { display: flex; flex-direction: column; gap: .2rem; min-width: 6rem; }
+
+/* avatar */
+.avatar { border-radius: 50%; object-fit: cover; }
+.avatar-fallback {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent-2); color: #fff; font-weight: 800;
+  border-radius: 50%; flex-shrink: 0;
+}
+
+/* coach bubble (análise / jogadas classificadas) */
+.coach-bubble {
+  display: flex; align-items: center; gap: .6rem;
+  background: var(--panel-2); border: 1px solid; border-left-width: 4px;
+  border-radius: .6rem; padding: .55rem .75rem; font-size: .85rem;
+  animation: coach-pop .25s ease;
+}
+@keyframes coach-pop { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: scale(1); } }
+.coach-icon {
+  width: 1.5rem; height: 1.5rem; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-size: .75rem; font-weight: 800;
+}
+
+/* estados */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; gap: .5rem;
+  padding: 2rem 1rem; color: var(--muted); text-align: center;
+}
+.empty-icon { font-size: 2rem; opacity: .6; }
+.spinner {
+  width: 1.4rem; height: 1.4rem; border-radius: 50%;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* linha de jogador */
+.player-row {
+  display: flex; align-items: center; gap: .7rem;
+  padding: .55rem .25rem; border-bottom: 1px solid var(--border);
+}
+.rank-num { width: 1.6rem; text-align: center; font-weight: 800; color: var(--muted); }
+.player-row-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.player-row-main strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-row-right { font-weight: 800; }
+.verified { color: var(--accent); }
+
+/* promoção: escolha de peça */
+.promo-row { display: flex; gap: .75rem; justify-content: center; padding: .5rem 0; }
+.promo-btn {
+  width: 3.6rem; height: 3.6rem; border-radius: .75rem; font-size: 2rem;
+  background: var(--panel-2); border: 1px solid var(--border); cursor: pointer;
+  transition: border-color .15s, transform .1s;
+}
+.promo-btn:hover { border-color: var(--accent); transform: scale(1.05); }
+
+/* card de curso academy */
+.course-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: .75rem; }
+
+/* realces de xeque / último lance no tabuleiro (inline styles usados no código) */
