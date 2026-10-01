@@ -172,7 +172,12 @@ function BotGame({ player, botRating, color, local, resumeFen, onExit }: {
   const [fen, setFen] = useState(game.fen());
   const [status, setStatus] = useState(gameStatus(game));
   const [over, setOver] = useState(game.isGameOver());
-  const [log, setLog] = useState<{ san: string; t: number; fen: string }[]>([]);
+  // lances anteriores ao load (retomada) — g.history() só cobre lances novos
+  const [baseSans] = useState<string[]>(resumeFen ? (loadGame()?.sans ?? []) : []);
+  const [log, setLog] = useState<{ san: string; t: number; fen: string }[]>(() => {
+    const init = new Chess();
+    return baseSans.map((san) => { init.move(san); return { san, t: 0, fen: init.fen() }; });
+  });
   const [viewPly, setViewPly] = useState<number | null>(null);
   const [coach, setCoach] = useState<AnalyzedMove | null>(null);
   const [promo, setPromo] = useState<{ from: string; to: string } | null>(null);
@@ -187,9 +192,10 @@ function BotGame({ player, botRating, color, local, resumeFen, onExit }: {
     const now = Date.now();
     const elapsed = lastMoveAt.current ? (now - lastMoveAt.current) / 1000 : 0;
     lastMoveAt.current = now;
+    const sans = [...baseSans, ...g.history()];
     setLog((prev) => {
-      const tmp = new Chess(startFen);
-      return g.history().map((san, i) => {
+      const tmp = new Chess();
+      return sans.map((san, i) => {
         tmp.move(san);
         return { san, t: i < prev.length ? prev[i].t : elapsed, fen: tmp.fen() };
       });
@@ -205,7 +211,7 @@ function BotGame({ player, botRating, color, local, resumeFen, onExit }: {
     if (g.isGameOver()) {
       saveGame(null);
     } else {
-      saveGame({ kind: local ? 'local' : 'bot', fen: g.fen(), color, botRating, plies: g.history().length });
+      saveGame({ kind: local ? 'local' : 'bot', fen: g.fen(), color, botRating, plies: sans.length, sans });
     }
 
     // coach bubble: classifica a jogada do jogador (local, offline-ok)
@@ -248,7 +254,7 @@ function BotGame({ player, botRating, color, local, resumeFen, onExit }: {
           });
       }
     }
-  }, [color, player.id, isGuest, local, botRating, startFen]);
+  }, [color, player.id, isGuest, local, botRating, baseSans]);
 
   function tryMove(from: string, to: string, promotion?: string): boolean {
     const g = game;
@@ -340,6 +346,7 @@ function BotGame({ player, botRating, color, local, resumeFen, onExit }: {
             <button className="btn-ghost text-sm" onClick={() => {
               try { game.undo(); game.undo(); } catch { /* sem jogadas */ }
               setFen(game.fen()); setStatus(gameStatus(game)); setViewPly(null);
+              setCoach(null);
               setLog((p) => p.slice(0, -2));
               saveGame(game.history().length
                 ? { kind: 'bot', fen: game.fen(), color, botRating, plies: game.history().length }

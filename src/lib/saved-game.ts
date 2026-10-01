@@ -7,6 +7,7 @@ export type SavedGame = {
   color: 'w' | 'b';
   botRating: number;
   plies: number;
+  sans?: string[];
 };
 
 const KEY = 'inpchess:game';

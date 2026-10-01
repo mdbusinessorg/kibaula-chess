@@ -1,29 +1,30 @@
-# INP CHESS v2.0 — Test Plan (real Supabase, guest + account)
+# INP CHESS v2.1 — Test Plan (static out/ on :3000)
 
-Server: `node node_modules/next/dist/bin/next dev -p 3000` (running). Accounts: guest mode + kibaula.test2@gmail.com / Kibaula@Test2208.
+Serving `out/` via `node serve-out.js` → http://localhost:3000 (service worker + prod build). Accounts: guest + kibaula.test2@gmail.com / matiasdomingos158@gmail.com.
 
-## T1 — Login page (guest + recover forms)
-- /login shows "Continuar como visitante (offline)" and "Esqueceste a password" → /recuperar form renders.
-- Guest mode → home loads, header shows visitante profile, no redirect to /login. Bottom nav: Início/Jogar/Treinar/Puzzles/Perfil + "Mais" opens Academy/Ranking/Torneios/Análise/Batalha/Temporadas/Comunidade/Honor Board/Insights/Admin.
+## T1 — Theme + /definicoes
+- New bordeaux/dourado look: legible on home, /jogar, /puzzles, /academy, /perfil (key screenshots).
+- /definicoes in Mais menu: toggle Som off → play a move → no audio errors; toggle Animações; board theme picker INP/Madeira/Noite visibly changes board in /jogar AND /puzzles. Restore defaults at end.
 
-## T2 — Bot game full loop (guest)
-- /jogar → Bot tab: 8 named bots 500–3000. Start vs weakest. Legal-move dots; coach bubble after human move; king red glow when in check (aim Qh5+/Bc4 vs weak bot); promotion bottom-sheet if reachable, else verify sheet code path via forced line; finish via checkmate or resign-free end; XP awarded.
-- Adversarial: click an ILLEGAL square — no move; click piece → dots only on legal targets.
+## T2 — Fluxo F resume
+- Bot game, 2-3 moves → navigate away → /jogar shows "Partida em curso · Continuar ▶" (bot name + move count); home shows "Continuar partida"; Continuar → same FEN/position; Desistir → card + home card gone (save cleared).
 
-## T3 — Puzzles (guest)
-- /puzzles → pick Mate em 1 → solve correct move on board → auto reply / solved state, streak counter increments, puzzle rating shown. Wrong move → failed/shake, retry.
+## T3 — Local mode
+- Local tile → alternate moves both sides on one board; captured glyphs under Pretas/Brancas cards; NO coach bubble.
 
-## T4 — Academy lesson with exercise (guest)
-- /academy → 8 courses → open one → module/lesson with exercise board → solve → "Concluir lição" gives XP toast; lesson marked done.
+## T4 — Navigable move list
+- Click a past move → board shows that position ("A rever o lance N"); ⏮◀▶⏭ step; touch board → back to live; subsequent move works.
 
-## T5 — /treinar, /analise, /perfil (guest)
-- /treinar hub tiles + continue card; /analise lists games (guest: likely empty state, no crash); /perfil shows nível/XP/streak/4 ratings/conquistas/histórico.
+## T5 — Undo + Desistir (bot)
+- ↩ Refazer undoes player+bot moves (log shrinks by 2); 🏳 Desistir → "desistência" status, game over, save cleared.
 
-## T6 — Offline indicator
-- SyncBadge top: verify it shows. Simulate offline via CDP (`Network.emulateNetworkConditions` offline) → "📡 Modo offline"; restore → "⟳/✓ Sincronizado".
+## T6 — PromotionSheet (deterministic via Local)
+- Local game: clear a-file/h-file for both sides, march a pawn to last rank → bottom-sheet opens → pick piece → promoted piece on board.
 
-## T7 — Account login (test2)
-- Sign out / clear guest → login kibaula.test2@gmail.com → home with real profile; spot-check /admin as admin account if quick (skip if not admin-gated).
+## T7 — Regression: last round's 3 bug fixes (commit 0ff52a6)
+- Academy "Exercício: coroação" a7→a8 now solves (was unsolvable).
+- /batalha: change ONE select only → comparison renders.
+- Guest /perfil: Lições ≥1 and XP>0 after a lesson.
 
-## T8 — Sweep remaining routes + console
-- /ranking /torneios /batalha /temporadas /comunidade /honor-board /insights /admin render; console clean throughout.
+## T8 — Quick regression + console
+- Bot game coach bubble works; puzzles solve; academy XP; análise; ranking; console clean.
