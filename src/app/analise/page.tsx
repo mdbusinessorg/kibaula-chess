@@ -10,16 +10,11 @@ import { listMoves, getMatch, type LiveMatch } from '@/lib/live';
 import { analyzeGame, coachText, type GameAnalysis } from '@/lib/analysis';
 import { CLASS_META } from '@/lib/engine';
 import { EmptyState, LoadingState, CoachBubble, ProgressBar } from '@/components/ui';
-
-const BOARD_OPTS = {
-  lightSquareStyle: { backgroundColor: '#ede3f7' },
-  darkSquareStyle: { backgroundColor: '#8a5fc0' },
-  boardStyle: { borderRadius: '0.5rem', overflow: 'hidden' },
-  animationDurationInMs: 150,
-  showAnimations: true,
-} as const;
+import { usePrefs, boardOpts, BOARD_THEMES } from '@/lib/prefs';
 
 function Analyzer({ matchId }: { matchId: string }) {
+  const prefs = usePrefs();
+  const theme = BOARD_THEMES[prefs.board];
   const [match, setMatch] = useState<LiveMatch | null>(null);
   const [analysis, setAnalysis] = useState<GameAnalysis | null>(null);
   const [ply, setPly] = useState(0);
@@ -81,19 +76,19 @@ function Analyzer({ matchId }: { matchId: string }) {
             <span>{match.whiteName ?? 'Brancas'}</span>
             <strong>{whiteAcc}%</strong>
           </div>
-          <ProgressBar pct={whiteAcc} color="#ede3f7" />
+          <ProgressBar pct={whiteAcc} color={theme.light} />
         </div>
         <div className="panel p-3">
           <div className="mb-1 flex justify-between text-sm">
             <span>{match.blackName ?? 'Pretas'}</span>
             <strong>{blackAcc}%</strong>
           </div>
-          <ProgressBar pct={blackAcc} color="#8a5fc0" />
+          <ProgressBar pct={blackAcc} color={theme.dark} />
         </div>
       </div>
 
       <div className="chessboard-wrap mx-auto max-w-[420px]">
-        <Chessboard options={{ position: fen, allowDragging: false, ...BOARD_OPTS }} />
+        <Chessboard options={{ position: fen, allowDragging: false, ...boardOpts(prefs) }} />
       </div>
 
       {cur && <CoachBubble cls={cur.cls} text={coachText(cur)} />}

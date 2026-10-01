@@ -145,10 +145,10 @@ export type MoveClass =
 
 export const CLASS_META: Record<MoveClass, { label: string; color: string; icon: string }> = {
   brilliant:  { label: 'é brilhante!',  color: '#26c2a3', icon: '!!' },
-  best:       { label: 'é a melhor',    color: '#a855f7', icon: '★' },
-  good:       { label: 'é boa',         color: '#9fb2c8', icon: '✓' },
-  book:       { label: 'de abertura',   color: '#a893c4', icon: '📖' },
-  inaccuracy: { label: 'imprecisão',    color: '#e7b34a', icon: '?!' },
+  best:       { label: 'é a melhor',    color: '#f0c860', icon: '★' },
+  good:       { label: 'é boa',         color: '#a9b2bc', icon: '✓' },
+  book:       { label: 'de abertura',   color: '#b8988f', icon: '📖' },
+  inaccuracy: { label: 'imprecisão',    color: '#e7a13a', icon: '?!' },
   mistake:    { label: 'é um erro',     color: '#e8821e', icon: '?' },
   blunder:    { label: 'é grave',       color: '#e04545', icon: '??' },
 };

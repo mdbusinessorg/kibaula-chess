@@ -18,6 +18,8 @@ import { coachText, type AnalyzedMove } from '@/lib/analysis';
 import { awardXp, XP, checkAchievements } from '@/lib/gamification';
 import { getGuest, saveGuest, isOnline } from '@/lib/offline';
 import { Sheet, CoachBubble, showToast } from '@/components/ui';
+import { usePrefs, boardOpts } from '@/lib/prefs';
+import { saveGame, loadGame, type SavedGame } from '@/lib/saved-game';
 
 function gameStatus(g: Chess): string {
   if (g.isCheckmate()) return `Xeque-mate — vencem as ${g.turn() === 'w' ? 'pretas' : 'brancas'}`;
@@ -54,7 +56,7 @@ function useHints(game: Chess, canMove: boolean, tryMove: (from: string, to: str
 
   const styles: Record<string, CSSProperties> = {};
   if (selected) {
-    styles[selected] = { boxShadow: 'inset 0 0 0 3px var(--accent)', backgroundColor: 'rgba(168,85,247,.22)' };
+    styles[selected] = { boxShadow: 'inset 0 0 0 3px var(--accent)', backgroundColor: 'rgba(231,179,74,.28)' };
   }
   for (const m of targets) {
     styles[m.to] = m.captured
@@ -90,13 +92,21 @@ function useHints(game: Chess, canMove: boolean, tryMove: (from: string, to: str
   return { squareStyles: styles, onSquareClick, markMove, clear: () => setSelected(null) };
 }
 
-const BOARD_OPTS = {
-  lightSquareStyle: { backgroundColor: '#ede3f7' },
-  darkSquareStyle: { backgroundColor: '#8a5fc0' },
-  boardStyle: { borderRadius: '0.5rem', overflow: 'hidden' },
-  animationDurationInMs: 220,
-  showAnimations: true,
-} as const;
+// peças capturadas por um lado (glifos do adversário que saíram do tabuleiro)
+const BASE_COUNT: Record<string, number> = { p: 8, n: 2, b: 2, r: 2, q: 1 };
+const GLYPH: Record<string, [string, string]> = {
+  p: ['♙', '♟'], n: ['♘', '♞'], b: ['♗', '♝'], r: ['♖', '♜'], q: ['♕', '♛'],
+};
+function capturedBy(g: Chess, color: 'w' | 'b'): string {
+  const opp = color === 'w' ? 'b' : 'w';
+  const cnt: Record<string, number> = { p: 0, n: 0, b: 0, r: 0, q: 0 };
+  for (const row of g.board()) for (const c of row)
+    if (c && c.color === opp && c.type !== 'k') cnt[c.type]++;
+  let out = '';
+  for (const t of ['q', 'r', 'b', 'n', 'p'])
+    for (let i = cnt[t]; i < BASE_COUNT[t]; i++) out += GLYPH[t][opp === 'w' ? 0 : 1];
+  return out;
+}
 
 const TIME_CONTROLS: { label: string; seconds: number | null }[] = [
   { label: 'Sem relógio', seconds: null },
@@ -151,15 +161,19 @@ function isPromotion(g: Chess, from: string, to: string): boolean {
     .some((m) => m.to === to && !!m.promotion);
 }
 
-// ---------- jogo contra o bot ----------
-function BotGame({ player, botRating, color, onExit }: {
-  player: Player; botRating: number; color: 'w' | 'b'; onExit: () => void;
+// ---------- jogo contra o bot / local (2 jogadores, 1 telemóvel) ----------
+function BotGame({ player, botRating, color, local, resumeFen, onExit }: {
+  player: Player; botRating: number; color: 'w' | 'b';
+  local?: boolean; resumeFen?: string; onExit: () => void;
 }) {
-  const [game] = useState(() => new Chess());
+  const prefs = usePrefs();
+  const startFen = resumeFen ?? new Chess().fen();
+  const [game] = useState(() => new Chess(startFen));
   const [fen, setFen] = useState(game.fen());
   const [status, setStatus] = useState(gameStatus(game));
-  const [over, setOver] = useState(false);
-  const [log, setLog] = useState<{ san: string; t: number }[]>([]);
+  const [over, setOver] = useState(game.isGameOver());
+  const [log, setLog] = useState<{ san: string; t: number; fen: string }[]>([]);
+  const [viewPly, setViewPly] = useState<number | null>(null);
   const [coach, setCoach] = useState<AnalyzedMove | null>(null);
   const [promo, setPromo] = useState<{ from: string; to: string } | null>(null);
   const lastMoveAt = useRef(0);
@@ -169,10 +183,17 @@ function BotGame({ player, botRating, color, onExit }: {
 
   const afterMove = useCallback((g: Chess, playerMove?: { uci: string; fenBefore: string }) => {
     setFen(g.fen());
+    setViewPly(null);
     const now = Date.now();
     const elapsed = lastMoveAt.current ? (now - lastMoveAt.current) / 1000 : 0;
     lastMoveAt.current = now;
-    setLog((prev) => g.history().map((san, i) => ({ san, t: i < prev.length ? prev[i].t : elapsed })));
+    setLog((prev) => {
+      const tmp = new Chess(startFen);
+      return g.history().map((san, i) => {
+        tmp.move(san);
+        return { san, t: i < prev.length ? prev[i].t : elapsed, fen: tmp.fen() };
+      });
+    });
     const last = g.history({ verbose: true }).at(-1);
     if (last) {
       if (last.captured) sounds.capture(); else sounds.move();
@@ -181,8 +202,14 @@ function BotGame({ player, botRating, color, onExit }: {
     }
     setStatus(gameStatus(g));
 
+    if (g.isGameOver()) {
+      saveGame(null);
+    } else {
+      saveGame({ kind: local ? 'local' : 'bot', fen: g.fen(), color, botRating, plies: g.history().length });
+    }
+
     // coach bubble: classifica a jogada do jogador (local, offline-ok)
-    if (playerMove) {
+    if (!local && playerMove) {
       const { cls, swing, evalAfter, best } = classifyMove(playerMove.fenBefore, playerMove.uci, 1);
       setCoach({
         ply: g.history().length, san: last?.san ?? '', uci: playerMove.uci,
@@ -195,6 +222,7 @@ function BotGame({ player, botRating, color, onExit }: {
       const res = g.isCheckmate() ? (g.turn() === 'w' ? '0-1' : '1-0') : '1/2-1/2';
       const mine = (res === '1-0' && color === 'w') || (res === '0-1' && color === 'b');
       if (g.isCheckmate() && mine) sounds.win(); else sounds.end();
+      if (local) return;
 
       if (isGuest) {
         const g2 = getGuest();
@@ -220,11 +248,12 @@ function BotGame({ player, botRating, color, onExit }: {
           });
       }
     }
-  }, [color, player.id, isGuest]);
+  }, [color, player.id, isGuest, local, botRating, startFen]);
 
   function tryMove(from: string, to: string, promotion?: string): boolean {
     const g = game;
-    if (g.isGameOver() || g.turn() !== color) return false;
+    if (g.isGameOver() || (!local && g.turn() !== color)) return false;
+    if (viewPly != null) setViewPly(null);
     if (!promotion && isPromotion(g, from, to)) { setPromo({ from, to }); return true; }
     const fenBefore = g.fen();
     let uci: string;
@@ -234,14 +263,17 @@ function BotGame({ player, botRating, color, onExit }: {
       uci = m.lan;
     } catch { sounds.illegal(); return false; }
     afterMove(g, { uci, fenBefore });
-    setTimeout(() => {
-      const mv = botMove(g, botRating);
-      if (mv && !g.isGameOver()) { g.move(mv); afterMove(g); }
-    }, 350);
+    if (!local) {
+      // o motor corre noutro tick — a UI nunca congela
+      setTimeout(() => {
+        const mv = botMove(g, botRating);
+        if (mv && !g.isGameOver()) { g.move(mv); afterMove(g); }
+      }, 300);
+    }
     return true;
   }
 
-  const hints = useHints(game, !over && game.turn() === color, tryMove);
+  const hints = useHints(game, !over && viewPly == null && (local || game.turn() === color), tryMove);
   useEffect(() => { markMoveRef.current = hints.markMove; }, [hints]);
 
   function onDrop({ sourceSquare, targetSquare }: { piece: unknown; sourceSquare: string; targetSquare: string | null }) {
@@ -251,7 +283,7 @@ function BotGame({ player, botRating, color, onExit }: {
 
   useEffect(() => {
     sounds.start();
-    if (color === 'b') {
+    if (!local && color === 'b' && !resumeFen) {
       const t = setTimeout(() => {
         const mv = botMove(game, botRating);
         if (mv) { game.move(mv); afterMove(game); }
@@ -261,45 +293,97 @@ function BotGame({ player, botRating, color, onExit }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const topSide: 'w' | 'b' = local ? 'b' : color === 'w' ? 'b' : 'w';
+  const mySide: 'w' | 'b' = local ? 'w' : color;
+  const shownFen = viewPly != null && log[viewPly] ? log[viewPly].fen : fen;
+
   return (
     <div className="grid gap-5 md:grid-cols-[1fr_280px]">
       <div className="mx-auto w-full max-w-[460px] space-y-3">
-        <PlayerCard name={bot.name} rating={bot.rating} clock={null}
-          active={game.turn() !== color && !over} icon={bot.icon} />
+        <div>
+          <PlayerCard name={local ? 'Pretas' : bot.name} rating={local ? undefined : bot.rating}
+            clock={null} active={!over && game.turn() === topSide} icon={local ? '♚' : bot.icon} />
+          <div className="min-h-5 pl-1 pt-0.5 text-base leading-none tracking-tight">{capturedBy(game, topSide)}</div>
+        </div>
         <div className="chessboard-wrap">
           <Chessboard options={{
-            position: fen,
-            boardOrientation: color === 'w' ? 'white' : 'black',
+            position: shownFen,
+            boardOrientation: !local && color === 'b' ? 'black' : 'white',
             onPieceDrop: onDrop,
-            onSquareClick: hints.onSquareClick,
-            squareStyles: hints.squareStyles,
-            allowDragging: !over,
-            ...BOARD_OPTS,
+            onSquareClick: (e) => {
+              if (viewPly != null) { setViewPly(null); return; }
+              hints.onSquareClick(e);
+            },
+            squareStyles: viewPly == null ? hints.squareStyles : {},
+            allowDragging: !over && viewPly == null,
+            ...boardOpts(prefs),
           }} />
         </div>
-        <PlayerCard name={player.username} rating={player.rating} clock={null}
-          active={game.turn() === color && !over} />
+        <div>
+          <PlayerCard name={local ? 'Brancas' : player.username} rating={local ? undefined : player.rating}
+            clock={null} active={!over && game.turn() === mySide} icon={local ? '♔' : undefined} />
+          <div className="min-h-5 pl-1 pt-0.5 text-base leading-none tracking-tight">{capturedBy(game, mySide)}</div>
+        </div>
       </div>
       <div className="space-y-3">
         <div className="panel p-4 text-sm">
           <p className="muted">{status}</p>
           <p className="mt-1 text-xs muted">
-            {bot.icon} {bot.name} ({bot.rating}) · {bot.desc} · jogas de {color === 'w' ? 'brancas' : 'pretas'}
+            {local
+              ? '👥 Partida local — dois jogadores, um telemóvel'
+              : `${bot.icon} ${bot.name} (${bot.rating}) · ${bot.desc} · jogas de ${color === 'w' ? 'brancas' : 'pretas'}`}
           </p>
         </div>
         {coach && <CoachBubble cls={coach.cls} text={coachText(coach, bot.name)} />}
+        <div className="grid grid-cols-2 gap-2">
+          {!local && (
+            <button className="btn-ghost text-sm" onClick={() => {
+              try { game.undo(); game.undo(); } catch { /* sem jogadas */ }
+              setFen(game.fen()); setStatus(gameStatus(game)); setViewPly(null);
+              setLog((p) => p.slice(0, -2));
+              saveGame(game.history().length
+                ? { kind: 'bot', fen: game.fen(), color, botRating, plies: game.history().length }
+                : null);
+            }}>↩ Refazer</button>
+          )}
+          <button className="btn-ghost text-sm !border-red-500/50 text-red-400" onClick={() => {
+            setStatus(local
+              ? (game.turn() === 'w' ? 'Pretas vencem — desistência' : 'Brancas vencem — desistência')
+              : (color === 'w' ? 'Pretas vencem — desistência' : 'Brancas vencem — desistência'));
+            setOver(true); sounds.end(); saveGame(null);
+          }}>🏳 Desistir</button>
+        </div>
         <button className="btn-ghost w-full text-sm" onClick={onExit}>← Nova partida</button>
         <div className="panel max-h-64 overflow-y-auto p-4 text-xs">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="muted text-[.65rem] font-bold uppercase tracking-wide">Lances</span>
+            {log.length > 0 && (
+              <div className="flex gap-1 text-xs">
+                <button className="btn-ghost !px-2 !py-0.5" onClick={() => setViewPly(0)}>⏮</button>
+                <button className="btn-ghost !px-2 !py-0.5" disabled={viewPly == null || viewPly === 0}
+                  onClick={() => setViewPly((v) => (v == null ? log.length - 1 : Math.max(0, v - 1)))}>◀</button>
+                <button className="btn-ghost !px-2 !py-0.5" disabled={viewPly == null}
+                  onClick={() => setViewPly((v) => (v == null ? null : v + 1 >= log.length ? null : v + 1))}>▶</button>
+                <button className="btn-ghost !px-2 !py-0.5" disabled={viewPly == null}
+                  onClick={() => setViewPly(null)}>⏭</button>
+              </div>
+            )}
+          </div>
+          {viewPly != null && (
+            <p className="muted mb-1 text-[.65rem]">A rever o lance {viewPly + 1} — toca no tabuleiro para voltar</p>
+          )}
           {log.length ? log.map((m, i) => (
-            <span key={i} className="muted">
-              {i % 2 === 0 ? `${i / 2 + 1}. ` : ''}
-              <span className="text-[var(--text)]">{m.san}</span>{' '}
-            </span>
+            <button key={i} onClick={() => setViewPly(i)}
+              className={`rounded px-1 text-left ${viewPly === i ? 'bg-[var(--accent)]/25' : 'hover:bg-[var(--panel-2)]'}`}>
+              <span className="muted">{i % 2 === 0 ? `${i / 2 + 1}. ` : ''}</span>
+              <span className="text-[var(--text)]">{m.san}</span>
+              <span className="muted ml-1 text-[10px]">{fmtClock(m.t)}</span>{' '}
+            </button>
           )) : <span className="muted">Sem jogadas ainda.</span>}
         </div>
         {over && <button className="btn w-full text-sm" onClick={onExit}>Nova partida</button>}
       </div>
-      <PromotionSheet open={!!promo} color={color}
+      <PromotionSheet open={!!promo} color={local ? game.turn() : color}
         onCancel={() => setPromo(null)}
         onPick={(p) => {
           const t = promo; setPromo(null);
@@ -313,6 +397,7 @@ function BotGame({ player, botRating, color, onExit }: {
 type TimedMove = { ply: number; san: string; uci: string; playedAt: number };
 
 function LiveGame({ matchId, me, onExit }: { matchId: string; me: Player; onExit: () => void }) {
+  const prefs = usePrefs();
   const [game] = useState(() => new Chess());
   const [fen, setFen] = useState(game.fen());
   const [applied, setApplied] = useState(0);
@@ -469,7 +554,7 @@ function LiveGame({ matchId, me, onExit }: { matchId: string; me: Player; onExit
             onSquareClick: hints.onSquareClick,
             squareStyles: hints.squareStyles,
             allowDragging: !!myTurn,
-            ...BOARD_OPTS,
+            ...boardOpts(prefs),
           }} />
         </div>
         <PlayerCard name={me.username} rating={me.rating}
@@ -567,12 +652,16 @@ function LiveGame({ matchId, me, onExit }: { matchId: string; me: Player; onExit
 }
 
 // ---------- ecrã Nova Partida ----------
-function NewGame({ me, onBot, onLive }: {
+function NewGame({ me, saved, onBot, onLocal, onLive, onResume, onDiscard }: {
   me: Player;
+  saved: SavedGame | null;
   onBot: (rating: number, color: 'w' | 'b') => void;
+  onLocal: () => void;
   onLive: (id: string) => void;
+  onResume: (s: SavedGame) => void;
+  onDiscard: () => void;
 }) {
-  const [mode, setMode] = useState<'online' | 'bot'>('bot');
+  const [mode, setMode] = useState<'online' | 'bot' | 'local'>('bot');
   const [botRating, setBotRating] = useState(1200);
   const [color, setColor] = useState<'w' | 'b'>('w');
   const [tc, setTc] = useState<number | null>(600);
@@ -625,8 +714,23 @@ function NewGame({ me, onBot, onLive }: {
     <div className="mx-auto max-w-[560px] space-y-6">
       <h1 className="text-2xl font-bold">Nova partida</h1>
 
-      <div className="grid grid-cols-2 gap-3">
-        {([['online', '🌐 Online', 'Contra outro jogador'], ['bot', '🤖 Bot', 'Treino — também offline']] as const).map(([k, t, s]) => (
+      {saved && (
+        <div className="panel flex items-center justify-between p-4">
+          <div>
+            <div className="text-xs muted">Partida em curso</div>
+            <div className="text-sm font-bold">
+              {saved.kind === 'bot' ? `🤖 vs ${botForRating(saved.botRating).name}` : '👥 Local'} · {Math.ceil(saved.plies / 2)}ª jogada
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button className="btn text-xs" onClick={() => onResume(saved)}>Continuar ▶</button>
+            <button className="btn-ghost text-xs" aria-label="Descartar" onClick={onDiscard}>✕</button>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-3">
+        {([['online', '🌐 Online', 'Outro jogador'], ['bot', '🤖 Bot', 'Treino, offline'], ['local', '👥 Local', '2 no mesmo tel.']] as const).map(([k, t, s]) => (
           <button key={k} onClick={() => setMode(k)}
             className={`tile p-4 text-left ${mode === k ? 'ring-2 ring-[var(--accent)]' : ''} ${k === 'online' && (isGuest || !online) ? 'opacity-40' : ''}`}>
             <div className="font-semibold">{t}</div>
@@ -636,6 +740,15 @@ function NewGame({ me, onBot, onLive }: {
       </div>
       {mode === 'online' && isGuest && (
         <p className="text-xs text-amber-400">Partidas online precisam de conta — entra ou cria conta.</p>
+      )}
+
+      {mode === 'local' && (
+        <div className="panel space-y-3 p-5">
+          <p className="text-sm muted">Dois jogadores alternam no mesmo telemóvel. Funciona totalmente offline e a partida fica guardada até terminar.</p>
+          <button className="btn w-full py-3 text-base font-bold" onClick={onLocal}>
+            ▶ Iniciar partida local
+          </button>
+        </div>
       )}
 
       {mode === 'bot' && (
@@ -657,7 +770,7 @@ function NewGame({ me, onBot, onLive }: {
               <span className="chip gold font-bold">{bot.icon} {bot.name} · {botRating}</span>
             </div>
             <input type="range" min={500} max={3000} step={100} value={botRating}
-              onChange={(e) => setBotRating(+e.target.value)} className="w-full accent-[#a855f7]" />
+              onChange={(e) => setBotRating(+e.target.value)} className="w-full accent-[#e7b34a]" />
             <div className="flex justify-between text-[10px] muted"><span>500</span><span>3000</span></div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm">
@@ -692,7 +805,7 @@ function NewGame({ me, onBot, onLive }: {
           <label className="flex items-center justify-between text-sm">
             <span>Partida por rating</span>
             <input type="checkbox" checked={rated} onChange={(e) => setRated(e.target.checked)}
-              className="h-4 w-4 accent-[#a855f7]" />
+              className="h-4 w-4 accent-[#e7b34a]" />
           </label>
           {invite && (
             <div className="rounded-lg border border-[var(--border)] bg-black/30 p-3 text-xs">
@@ -761,10 +874,17 @@ function NewGame({ me, onBot, onLive }: {
 // ---------- página ----------
 function JogarInner() {
   const [me, setMe] = useState<Player | null>(null);
-  const [view, setView] = useState<'new' | 'bot' | 'live'>('new');
+  const [view, setView] = useState<'new' | 'bot' | 'local' | 'live'>('new');
   const [botCfg, setBotCfg] = useState<{ rating: number; color: 'w' | 'b' }>({ rating: 1200, color: 'w' });
   const [matchId, setMatchId] = useState<string | null>(null);
+  const [resumeFen, setResumeFen] = useState<string | undefined>();
+  const [saved, setSaved] = useState<SavedGame | null>(null);
   const params = useSearchParams();
+
+  useEffect(() => {
+    const t = setTimeout(() => setSaved(loadGame()), 0);
+    return () => clearTimeout(t);
+  }, [view]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -807,13 +927,21 @@ function JogarInner() {
   return (
     <div>
       {view === 'new' && (
-        <NewGame me={me}
-          onBot={(rating, c) => { setBotCfg({ rating, color: c }); setView('bot'); }}
-          onLive={(id) => { setMatchId(id); setView('live'); }} />
+        <NewGame me={me} saved={saved}
+          onBot={(rating, c) => { setBotCfg({ rating, color: c }); setResumeFen(undefined); setView('bot'); }}
+          onLocal={() => { setResumeFen(undefined); setView('local'); }}
+          onLive={(id) => { setMatchId(id); setView('live'); }}
+          onResume={(s) => {
+            setBotCfg({ rating: s.botRating, color: s.color });
+            setResumeFen(s.fen);
+            setView(s.kind === 'local' ? 'local' : 'bot');
+          }}
+          onDiscard={() => { saveGame(null); setSaved(null); }} />
       )}
-      {view === 'bot' && (
+      {(view === 'bot' || view === 'local') && (
         <BotGame player={me} botRating={botCfg.rating} color={botCfg.color}
-          onExit={() => setView('new')} />
+          local={view === 'local'} resumeFen={resumeFen} key={resumeFen ?? view}
+          onExit={() => { setView('new'); setResumeFen(undefined); }} />
       )}
       {view === 'live' && matchId && (
         <LiveGame matchId={matchId} me={me} onExit={() => { setView('new'); setMatchId(null); }} />

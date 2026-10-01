@@ -24,6 +24,7 @@ const MORE = [
   ['Comunidade', '/comunidade'],
   ['Honor Board', '/honor-board'],
   ['Insights', '/insights'],
+  ['Definições', '/definicoes'],
   ['Admin', '/admin'],
 ] as const;
 

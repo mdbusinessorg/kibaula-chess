@@ -7,6 +7,8 @@ import { getSession, getMyPlayer } from '@/lib/auth';
 import { getGuest, guestAsPlayer, isOnline } from '@/lib/offline';
 import { ACADEMY, courseProgress } from '@/lib/academy';
 import { levelFor, levelProgress } from '@/lib/gamification';
+import { loadGame, type SavedGame } from '@/lib/saved-game';
+import { botForRating } from '@/lib/engine';
 import { supabase } from '@/lib/client';
 import { Avatar, ProgressBar } from '@/components/ui';
 import type { Player } from '@/lib/types';
@@ -29,6 +31,7 @@ export default function Home() {
   const [recent, setRecent] = useState<RecentGame[]>([]);
   const [nextCourse, setNextCourse] = useState<{ slug: string; title: string; icon: string; pct: number } | null>(null);
   const [isGuest, setIsGuest] = useState(false);
+  const [savedGame, setSavedGame] = useState<SavedGame | null>(null);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -41,6 +44,7 @@ export default function Home() {
         if (g) { p = guestAsPlayer(g); setIsGuest(true); }
       }
       setMe(p);
+      setSavedGame(loadGame());
 
       // ranking + partidas + progresso (online apenas)
       if (isOnline() && s) {
@@ -118,15 +122,31 @@ export default function Home() {
         </div>
       </section>
 
-      {/* acções principais */}
-      <section className="grid grid-cols-3 gap-3">
-        <Link href="/jogar" className="btn flex-col gap-1 py-4 text-center">
-          <span className="text-xl">▶</span> JOGAR
+      {/* acção principal */}
+      <Link href="/jogar" className="btn w-full py-4 text-lg font-extrabold tracking-wide">
+        ▶ JOGAR AGORA
+      </Link>
+
+      {/* partida em curso (bot/local guardada no telemóvel) */}
+      {savedGame && (
+        <Link href="/jogar" className="tile flex items-center gap-3 border-[var(--accent)] p-4">
+          <span className="tile-icon text-xl">⏸</span>
+          <div className="flex-1">
+            <div className="text-xs muted">Continuar partida</div>
+            <div className="text-sm font-bold">
+              {savedGame.kind === 'bot' ? `vs ${botForRating(savedGame.botRating).name}` : 'Partida local'} · {Math.ceil(savedGame.plies / 2)}ª jogada
+            </div>
+          </div>
+          <span className="accent">▶</span>
         </Link>
-        <Link href="/treinar" className="btn-ghost flex-col gap-1 py-4 text-center">
+      )}
+
+      {/* acções secundárias */}
+      <section className="grid grid-cols-2 gap-3">
+        <Link href="/treinar" className="btn-ghost flex-col gap-1 py-3 text-center">
           <span className="text-xl">🎯</span> TREINAR
         </Link>
-        <Link href="/puzzles" className="btn-ghost flex-col gap-1 py-4 text-center">
+        <Link href="/puzzles" className="btn-ghost flex-col gap-1 py-3 text-center">
           <span className="text-xl">🧩</span> PUZZLES
         </Link>
       </section>

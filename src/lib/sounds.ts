@@ -1,7 +1,11 @@
 'use client';
 
+import { getPrefs } from './prefs';
+
 // Sons do tabuleiro sintetizados com WebAudio — sem ficheiros externos.
 let ctx: AudioContext | null = null;
+
+function on(): boolean { return getPrefs().sound; }
 
 function ac(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -13,6 +17,7 @@ function ac(): AudioContext | null {
 }
 
 function tone(freq: number, dur: number, type: OscillatorType, gain = 0.15, delay = 0) {
+  if (!on()) return;
   const c = ac();
   if (!c) return;
   const t = c.currentTime + delay;
@@ -28,6 +33,7 @@ function tone(freq: number, dur: number, type: OscillatorType, gain = 0.15, dela
 }
 
 function knock(gain = 0.3, freq = 180, dur = 0.09) {
+  if (!on()) return;
   const c = ac();
   if (!c) return;
   const t = c.currentTime;

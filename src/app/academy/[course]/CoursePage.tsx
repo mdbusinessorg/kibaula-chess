@@ -11,16 +11,10 @@ import { awardXp } from '@/lib/gamification';
 import { supabase } from '@/lib/client';
 import { ProgressBar, showToast } from '@/components/ui';
 import { sounds } from '@/lib/sounds';
-
-const BOARD_OPTS = {
-  lightSquareStyle: { backgroundColor: '#ede3f7' },
-  darkSquareStyle: { backgroundColor: '#8a5fc0' },
-  boardStyle: { borderRadius: '0.5rem', overflow: 'hidden' },
-  animationDurationInMs: 220,
-  showAnimations: true,
-} as const;
+import { usePrefs, boardOpts } from '@/lib/prefs';
 
 function ExerciseBoard({ lesson, onSolved }: { lesson: Lesson; onSolved: () => void }) {
+  const prefs = usePrefs();
   const [game] = useState(() => new Chess(lesson.fen));
   const [fen, setFen] = useState(game.fen());
   const [step, setStep] = useState(0);
@@ -67,7 +61,7 @@ function ExerciseBoard({ lesson, onSolved }: { lesson: Lesson; onSolved: () => v
             targetSquare ? tryMove(sourceSquare, targetSquare) : false,
           onSquareClick: () => {},
           allowDragging: true,
-          ...BOARD_OPTS,
+          ...boardOpts(prefs),
         }} />
       </div>
     </div>

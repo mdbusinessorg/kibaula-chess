@@ -1,17 +1,19 @@
 @import "tailwindcss";
 
-/* INP CHESS — tema escuro roxo próprio */
+/* INP CHESS — identidade INP: bordeaux + dourado sobre carvão */
 :root {
-  --bg: #12081f;
-  --panel: #1e1130;
-  --panel-2: #2a1a42;
-  --border: #3c2658;
-  --text: #f2ecf9;
-  --muted: #a893c4;
-  --accent: #a855f7;
-  --accent-2: #7c3aed;
+  --bg: #150a0c;
+  --panel: #241013;
+  --panel-2: #341a1e;
+  --border: #4d262c;
+  --text: #f7f1ea;
+  --muted: #c9a8a4;
+  --accent: #e7b34a;      /* dourado INP — acções e destaques */
+  --accent-2: #a42335;    /* bordeaux INP — marca e hover */
+  --gold-hi: #f5cd6b;
   --orange: #e8821e;
   --gold: #e7b34a;
+  --red: #e04545;
 }
 
 * { box-sizing: border-box; }
@@ -47,16 +49,16 @@ body {
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
   background: var(--accent);
-  color: #fff;
+  color: #2a1400;
   font-weight: 700;
   border-radius: 0.5rem;
   padding: 0.6rem 1.1rem;
   border: none;
   box-shadow: 0 3px 0 rgba(0,0,0,.35);
-  transition: filter .15s, transform .05s;
+  transition: background .15s, transform .05s;
   cursor: pointer;
 }
-.btn:hover { background: var(--accent-2); }
+.btn:hover { background: var(--accent-2); color: #fff; }
 .btn:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,.35); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn-orange { background: var(--orange); }
@@ -84,7 +86,7 @@ body {
 .chip.gold { color: var(--gold); border-color: var(--gold); }
 
 .banner {
-  background: linear-gradient(120deg, #6d28d9, #a855f7);
+  background: linear-gradient(120deg, #6d1424, #a42335);
   border-radius: 0.75rem;
   color: #fff;
 }
@@ -159,8 +161,8 @@ tr { border-bottom: 1px solid var(--border); }
   animation: fade-slide .25s ease;
   backdrop-filter: blur(6px);
 }
-.sync-badge.offline { background: rgba(60,38,88,.92); color: var(--gold); border: 1px solid var(--gold); }
-.sync-badge.syncing { background: rgba(124,58,237,.9); color: #fff; }
+.sync-badge.offline { background: rgba(52,26,30,.95); color: var(--gold); border: 1px solid var(--gold); }
+.sync-badge.syncing { background: rgba(164,35,53,.92); color: #fff; }
 .sync-badge.online { background: rgba(38,194,163,.9); color: #fff; }
 @keyframes fade-slide { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 

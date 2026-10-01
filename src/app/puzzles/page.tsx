@@ -11,16 +11,10 @@ import { awardXp, XP } from '@/lib/gamification';
 import { supabase } from '@/lib/client';
 import { sounds } from '@/lib/sounds';
 import { EmptyState, showToast } from '@/components/ui';
-
-const BOARD_OPTS = {
-  lightSquareStyle: { backgroundColor: '#ede3f7' },
-  darkSquareStyle: { backgroundColor: '#8a5fc0' },
-  boardStyle: { borderRadius: '0.5rem', overflow: 'hidden' },
-  animationDurationInMs: 200,
-  showAnimations: true,
-} as const;
+import { usePrefs, boardOpts } from '@/lib/prefs';
 
 function PuzzleBoard({ puzzle, onDone }: { puzzle: Puzzle; onDone: (solved: boolean) => void }) {
+  const prefs = usePrefs();
   const [game] = useState(() => new Chess(puzzle.fen));
   const [fen, setFen] = useState(game.fen());
   const [step, setStep] = useState(0);
@@ -75,7 +69,7 @@ function PuzzleBoard({ puzzle, onDone }: { puzzle: Puzzle; onDone: (solved: bool
           onPieceDrop: ({ sourceSquare, targetSquare }) =>
             state === 'play' && targetSquare ? tryMove(sourceSquare, targetSquare) : false,
           allowDragging: state === 'play',
-          ...BOARD_OPTS,
+          ...boardOpts(prefs),
         }} />
       </div>
       <p className={`mt-2 text-center text-sm font-semibold ${
