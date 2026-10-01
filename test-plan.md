@@ -1,36 +1,30 @@
-# Kibaúla Chess — Test Plan (fallback mode, no Supabase)
+# INP CHESS v2.1 — Test Plan (static out/ on :3000)
 
-App: Next.js 16 dev server at http://localhost:3000 (already running, `node node_modules/next/dist/bin/next dev -p 3000`). All tests via browser UI with recording.
+Serving `out/` via `node serve-out.js` → http://localhost:3000 (service worker + prod build). Accounts: guest + kibaula.test2@gmail.com / matiasdomingos158@gmail.com.
 
-## T1 — Landing page
-- Open `/`. Assert: hero "Kibaúla Chess" visible; heading "8 ÁREAS. UMA COMUNIDADE."; exactly 8 course cards in grid; footer text contains "Projeto conceptual" and "não é uma aplicação oficial do INP".
-- Hover one card: stats row appears ("0 jogadores · 0 partidas", "Rating médio: —", "#N no Ranking Kibaúla").
+## T1 — Theme + /definicoes
+- New bordeaux/dourado look: legible on home, /jogar, /puzzles, /academy, /perfil (key screenshots).
+- /definicoes in Mais menu: toggle Som off → play a move → no audio errors; toggle Animações; board theme picker INP/Madeira/Noite visibly changes board in /jogar AND /puzzles. Restore defaults at end.
 
-## T2 — Onboarding
-- Open `/onboarding`. Assert: course selector/cards show 8 INP courses with icon + abbreviation; form fields (nome, username, email, curso) present.
-- Fill form and submit. Assert: fails visibly with clear error — UI shows error message (API returns 503 "Base de dados não configurada (Supabase)."), no crash.
+## T2 — Fluxo F resume
+- Bot game, 2-3 moves → navigate away → /jogar shows "Partida em curso · Continuar ▶" (bot name + move count); home shows "Continuar partida"; Continuar → same FEN/position; Desistir → card + home card gone (save cleared).
 
-## T3 — Ranking
-- Open `/ranking`. Assert: course filter present; sections "Jogadores", "Ranking dos Cursos" (with 8 courses listed at 0), "Ranking por Turma" (empty) render without errors.
-- Click a course filter. Assert: page updates, still no errors.
+## T3 — Local mode
+- Local tile → alternate moves both sides on one board; captured glyphs under Pretas/Brancas cards; NO coach bubble.
 
-## T4 — Batalha
-- Open `/batalha`. Assert: two course selects with "VS"; both panels show bars at 0.
-- Set both selects to the same course. Assert: comparison disappears, message "Escolhe dois cursos diferentes." shows.
+## T4 — Navigable move list
+- Click a past move → board shows that position ("A rever o lance N"); ⏮◀▶⏭ step; touch board → back to live; subsequent move works.
 
-## T5 — Static-ish pages
-- `/temporadas`: renders, empty state, no error.
-- `/torneios`: renders, empty state.
-- `/academy`: 5 categories listed.
-- `/honor-board`: renders, empty state.
-- `/insights`: counters at 0.
-- `/comunidade`: 8 courses listed.
+## T5 — Undo + Desistir (bot)
+- ↩ Refazer undoes player+bot moves (log shrinks by 2); 🏳 Desistir → "desistência" status, game over, save cleared.
 
-## T6 — Admin
-- Open `/admin`. Assert: forms present. Trigger one action (e.g. submit season/form). Assert: error shown "Supabase não configurado" or similar; page does not crash.
+## T6 — PromotionSheet (deterministic via Local)
+- Local game: clear a-file/h-file for both sides, march a pawn to last rank → bottom-sheet opens → pick piece → promoted piece on board.
 
-## T7 — 404
-- `/perfil/qualquer` → proper 404 page.
+## T7 — Regression: last round's 3 bug fixes (commit 0ff52a6)
+- Academy "Exercício: coroação" a7→a8 now solves (was unsolvable).
+- /batalha: change ONE select only → comparison renders.
+- Guest /perfil: Lições ≥1 and XP>0 after a lesson.
 
-## T8 — Console errors
-- Throughout navigation, check browser console: no red errors (hydration/500s).
+## T8 — Quick regression + console
+- Bot game coach bubble works; puzzles solve; academy XP; análise; ranking; console clean.

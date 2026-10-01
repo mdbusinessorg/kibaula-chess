@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signIn, signUp } from '@/lib/auth';
+import { createGuest } from '@/lib/offline';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,17 +35,22 @@ export default function LoginPage() {
     }
   }
 
+  function guest() {
+    createGuest();
+    router.replace('/');
+  }
+
   return (
     <div className="mx-auto max-w-md py-10">
       <div className="panel p-6">
-        <h1 className="mb-1 text-2xl font-bold text-center">♞ Kibaúla Chess</h1>
+        <h1 className="mb-1 text-2xl font-bold text-center">♞ INP <span className="accent">CHESS</span></h1>
         <p className="mb-6 text-center text-sm muted">
-          Plataforma conceptual de xadrez da comunidade INP. Entra ou cria a tua conta.
+          Joga, treina e aprende xadrez com a comunidade INP.
         </p>
         <div className="mb-5 grid grid-cols-2 gap-1 rounded-lg border border-[var(--border)] p-1 text-sm">
           {(['entrar', 'criar'] as const).map((m) => (
             <button key={m} type="button" onClick={() => setMode(m)}
-              className={`rounded-md py-1.5 ${mode === m ? 'bg-[var(--accent)] text-black font-semibold' : 'muted'}`}>
+              className={`rounded-md py-1.5 ${mode === m ? 'bg-[var(--accent)] text-white font-semibold' : 'muted'}`}>
               {m === 'entrar' ? 'Entrar' : 'Criar conta'}
             </button>
           ))}
@@ -51,21 +58,36 @@ export default function LoginPage() {
         <form onSubmit={submit} className="space-y-3">
           {mode === 'criar' && (
             <>
-              <input className="input" placeholder="Nome completo" value={fullName}
+              <input className="input w-full" placeholder="Nome completo" value={fullName}
                 onChange={(e) => setFullName(e.target.value)} required />
-              <input className="input" placeholder="Username" value={username}
+              <input className="input w-full" placeholder="Username" value={username}
                 onChange={(e) => setUsername(e.target.value)} required />
             </>
           )}
-          <input className="input" type="email" placeholder="Email" value={email}
+          <input className="input w-full" type="email" placeholder="Email" value={email}
             onChange={(e) => setEmail(e.target.value)} required />
-          <input className="input" type="password" placeholder="Password (mín. 6)" value={password}
+          <input className="input w-full" type="password" placeholder="Password (mín. 6)" value={password}
             onChange={(e) => setPassword(e.target.value)} minLength={6} required />
           {err && <p className="text-sm text-red-400">{err}</p>}
           <button className="btn w-full" disabled={busy}>
             {busy ? '…' : mode === 'entrar' ? 'Entrar' : 'Criar conta'}
           </button>
         </form>
+
+        {mode === 'entrar' && (
+          <p className="mt-3 text-center text-sm">
+            <Link href="/recuperar" className="accent">Esqueceste a password?</Link>
+          </p>
+        )}
+
+        <div className="mt-5 border-t border-[var(--border)] pt-4 text-center">
+          <button className="btn-ghost w-full text-sm" onClick={guest}>
+            Continuar como visitante (offline)
+          </button>
+          <p className="mt-2 text-xs muted">
+            No modo visitante podes jogar contra bots, fazer puzzles e estudar cursos sem conta.
+          </p>
+        </div>
       </div>
     </div>
   );

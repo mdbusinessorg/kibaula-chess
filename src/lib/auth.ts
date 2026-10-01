@@ -43,6 +43,20 @@ export async function signOut() {
   await supabase.auth.signOut();
 }
 
+/** Recuperação: envia email com token/link para redefinir a password. */
+export async function requestPasswordReset(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/redefinir-senha` : undefined,
+  });
+  if (error) throw new Error(error.message);
+}
+
+/** Nova password depois de seguir o link de recuperação. */
+export async function updatePassword(newPassword: string) {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw new Error(error.message);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapPlayer(r: any): Player {
   return {
@@ -54,6 +68,14 @@ function mapPlayer(r: any): Player {
     classId: r.class_id, className: r.classes?.name ?? null,
     gradeLabel: r.classes?.grade_label ?? null,
     academicYear: r.academic_years?.label ?? null,
+    xp: r.xp ?? 0,
+    level: r.level ?? 1,
+    streakDays: r.streak_days ?? 0,
+    ratingBlitz: r.rating_blitz ?? r.rating,
+    ratingRapid: r.rating_rapid ?? r.rating,
+    ratingClassical: r.rating_classical ?? r.rating,
+    ratingPuzzle: r.rating_puzzle ?? 1200,
+    avatarUrl: r.avatar_url ?? null,
   };
 }
 

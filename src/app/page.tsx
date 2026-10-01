@@ -2,74 +2,217 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { getCourses } from '@/lib/queries';
-import type { Course } from '@/lib/types';
+import { getPlayers } from '@/lib/queries';
+import { getSession, getMyPlayer } from '@/lib/auth';
+import { getGuest, guestAsPlayer, isOnline } from '@/lib/offline';
+import { ACADEMY, courseProgress } from '@/lib/academy';
+import { levelFor, levelProgress } from '@/lib/gamification';
+import { loadGame, type SavedGame } from '@/lib/saved-game';
+import { botForRating } from '@/lib/engine';
+import { supabase } from '@/lib/client';
+import { Avatar, ProgressBar } from '@/components/ui';
+import type { Player } from '@/lib/types';
+
+type RecentGame = {
+  id: string; white: string; black: string; result: string | null;
+  status: string; when: string;
+};
+
+const RATING_STATS: [string, string, keyof Player][] = [
+  ['⚡', 'Blitz', 'ratingBlitz'],
+  ['⏱', 'Rápida', 'ratingRapid'],
+  ['🐢', 'Clássica', 'ratingClassical'],
+  ['🧩', 'Puzzles', 'ratingPuzzle'],
+];
 
 export default function Home() {
-  const [courses, setCourses] = useState<Course[]>([]);
+  const [me, setMe] = useState<Player | null>(null);
+  const [top, setTop] = useState<Player[]>([]);
+  const [recent, setRecent] = useState<RecentGame[]>([]);
+  const [nextCourse, setNextCourse] = useState<{ slug: string; title: string; icon: string; pct: number } | null>(null);
+  const [isGuest, setIsGuest] = useState(false);
+  const [savedGame, setSavedGame] = useState<SavedGame | null>(null);
+
   useEffect(() => {
-    getCourses().then(setCourses).catch(() => setCourses([]));
+    const t = setTimeout(async () => {
+      const s = await getSession();
+      let p: Player | null = null;
+      if (s) {
+        p = await getMyPlayer(s.userId);
+      } else {
+        const g = getGuest();
+        if (g) { p = guestAsPlayer(g); setIsGuest(true); }
+      }
+      setMe(p);
+      setSavedGame(loadGame());
+
+      // ranking + partidas + progresso (online apenas)
+      if (isOnline() && s) {
+        getPlayers().then((pl) => setTop(pl.slice(0, 5))).catch(() => {});
+        if (p && p.id !== 'guest') {
+          supabase.from('live_matches')
+            .select('id,result,status,created_at,white:players!live_matches_white_player_id_fkey(username),black:players!live_matches_black_player_id_fkey(username)')
+            .or(`white_player_id.eq.${p.id},black_player_id.eq.${p.id}`)
+            .order('created_at', { ascending: false }).limit(3)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .then(({ data }) => setRecent((data ?? []).map((m: any) => ({
+              id: m.id, white: m.white?.username ?? '—', black: m.black?.username ?? '…',
+              result: m.result, status: m.status,
+              when: new Date(m.created_at).toLocaleDateString('pt-PT'),
+            }))));
+
+          // curso a continuar: o que tem mais progresso <100%, senão o 1º
+          const { data: lp } = await supabase.from('lesson_progress')
+            .select('lesson_slug').eq('player_id', p.id);
+          const done = new Set((lp ?? []).map((r) => r.lesson_slug as string));
+          let best: typeof nextCourse = null;
+          for (const c of ACADEMY) {
+            const pct = courseProgress(c, done);
+            if (pct > 0 && pct < 100) { best = { slug: c.slug, title: c.title, icon: c.icon, pct }; break; }
+          }
+          if (!best) {
+            const c = ACADEMY[0];
+            const pct = courseProgress(c, done);
+            if (pct < 100) best = { slug: c.slug, title: c.title, icon: c.icon, pct };
+          }
+          setNextCourse(best);
+        }
+      }
+    });
+    return () => clearTimeout(t);
   }, []);
 
+  const xp = me?.xp ?? 0;
+  const level = levelFor(xp);
+
   return (
-    <div className="space-y-12">
-      <section className="py-10 text-center">
-        <p className="mb-2 text-sm uppercase tracking-widest accent">
-          Xadrez · Comunidade · Identidade Académica · Competição · Aprendizagem
-        </p>
-        <h1 className="text-4xl font-bold">
-          Kibaúla <span className="accent">Chess</span>
-        </h1>
-        <p className="mx-auto mt-4 max-w-xl muted">
-          O espaço digital onde os estudantes do INP jogam, competem, aprendem e
-          representam os seus cursos. Formação, excelência, inovação e
-          desenvolvimento técnico — transformados num universo de xadrez.
-        </p>
-        <div className="mt-6 flex justify-center gap-3">
-          <Link href="/onboarding" className="btn">Criar a minha conta</Link>
-          <Link href="/ranking" className="btn-ghost">Ver ranking</Link>
+    <div className="mx-auto max-w-xl space-y-5">
+      {/* saudação */}
+      <section className="flex items-center gap-3">
+        <Avatar name={me?.fullName ?? 'Visitante'} url={me?.avatarUrl} size={52} />
+        <div className="flex-1">
+          <div className="text-lg font-bold">Olá, {me?.fullName?.split(' ')[0] ?? 'jogador'} 👋</div>
+          <div className="text-xs muted">
+            {isGuest ? 'Modo visitante (offline)' : `@${me?.username ?? '—'}`}
+            {me?.inpVerified ? ' ✓' : ''}
+          </div>
         </div>
+        <span className="chip gold">Nv. {level}</span>
       </section>
 
-      <section>
-        <h2 className="mb-1 text-2xl font-bold">8 ÁREAS. UMA COMUNIDADE.</h2>
-        <p className="mb-6 text-sm muted">
-          Os cursos do Ensino Médio do INP — cada um representado no Kibaúla.
-        </p>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {courses.map((c) => (
-            <Link
-              key={c.slug}
-              href={`/ranking?curso=${c.slug}`}
-              className="panel course-card group p-4 transition hover:border-[var(--accent)]"
-            >
-              <div className="text-2xl">{c.icon}</div>
-              <div className="mt-2 font-semibold uppercase tracking-wide">
-                {c.abbreviation}
-              </div>
-              <div className="text-sm muted">{c.name}</div>
-              <div className="course-card-stats mt-3 text-xs muted">
-                <div>{c.players} jogadores · {c.games} partidas</div>
-                <div>Rating médio: {c.avgRating || '—'}</div>
-                <div className="accent">#{c.rank} no Ranking Kibaúla</div>
-              </div>
-            </Link>
+      {/* ratings + XP + streak */}
+      <section className="panel p-3">
+        <div className="flex justify-around">
+          {RATING_STATS.map(([icon, label, field]) => (
+            <div key={label} className="rating-badge">
+              <span className="rb-icon">{icon}</span>
+              <span className="rb-value">{(me?.[field] as number) ?? me?.rating ?? 1200}</span>
+              <span className="rb-label">{label}</span>
+            </div>
           ))}
         </div>
+        <div className="mt-3 flex items-center gap-3 border-t border-[var(--border)] pt-3">
+          <div className="flex-1">
+            <div className="mb-1 flex justify-between text-[11px] muted">
+              <span>Nível {level}</span><span>{xp} XP</span>
+            </div>
+            <ProgressBar pct={levelProgress(xp)} />
+          </div>
+          <span className="chip" title="Dias seguidos a jogar">🔥 {me?.streakDays ?? 0}</span>
+        </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-3">
-        {[
-          ['🏆 Ranking Geral', 'Todos os jogadores do Kibaúla.', '/ranking'],
-          ['⚔️ Batalha dos Cursos', 'Curso contra curso, dados reais.', '/batalha'],
-          ['🎓 Kibaúla Season', 'Temporadas, campeões e histórico.', '/temporadas'],
-        ].map(([t, d, href]) => (
-          <Link key={href} href={href} className="panel p-5 hover:border-[var(--accent)]">
-            <div className="font-semibold">{t}</div>
-            <div className="mt-1 text-sm muted">{d}</div>
-          </Link>
-        ))}
+      {/* acção principal */}
+      <Link href="/jogar" className="btn w-full py-4 text-lg font-extrabold tracking-wide">
+        ▶ JOGAR AGORA
+      </Link>
+
+      {/* partida em curso (bot/local guardada no telemóvel) */}
+      {savedGame && (
+        <Link href="/jogar" className="tile flex items-center gap-3 border-[var(--accent)] p-4">
+          <span className="tile-icon text-xl">⏸</span>
+          <div className="flex-1">
+            <div className="text-xs muted">Continuar partida</div>
+            <div className="text-sm font-bold">
+              {savedGame.kind === 'bot' ? `vs ${botForRating(savedGame.botRating).name}` : 'Partida local'} · {Math.ceil(savedGame.plies / 2)}ª jogada
+            </div>
+          </div>
+          <span className="accent">▶</span>
+        </Link>
+      )}
+
+      {/* acções secundárias */}
+      <section className="grid grid-cols-2 gap-3">
+        <Link href="/treinar" className="btn-ghost flex-col gap-1 py-3 text-center">
+          <span className="text-xl">🎯</span> TREINAR
+        </Link>
+        <Link href="/puzzles" className="btn-ghost flex-col gap-1 py-3 text-center">
+          <span className="text-xl">🧩</span> PUZZLES
+        </Link>
       </section>
+
+      {/* última partida */}
+      {recent.length > 0 && (
+        <section>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-bold">Últimas partidas</h2>
+            <Link href="/analise" className="text-xs accent">Analisar →</Link>
+          </div>
+          <div className="space-y-2">
+            {recent.map((g) => (
+              <Link key={g.id} href={`/analise?m=${g.id}`}
+                className="panel flex items-center justify-between p-3 text-sm hover:border-[var(--accent)]">
+                <span>{g.white} vs {g.black}</span>
+                <span className="muted text-xs">
+                  {g.status === 'active' ? '🔴 ao vivo' : g.result ?? g.status} · {g.when}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* continuar curso */}
+      {nextCourse && (
+        <Link href={`/academy/${nextCourse.slug}`} className="tile flex items-center gap-3 p-4">
+          <span className="tile-icon text-xl">{nextCourse.icon}</span>
+          <div className="flex-1">
+            <div className="text-xs muted">Continuar a aprender</div>
+            <div className="text-sm font-bold">{nextCourse.title}</div>
+            <ProgressBar pct={nextCourse.pct} />
+          </div>
+          <span className="muted">▸</span>
+        </Link>
+      )}
+
+      {/* ranking */}
+      {top.length > 0 && (
+        <section>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-bold">🏆 Ranking INP</h2>
+            <Link href="/ranking" className="text-xs accent">Ver tudo →</Link>
+          </div>
+          <div className="panel divide-y divide-[var(--border)]">
+            {top.map((p, i) => (
+              <div key={p.id} className="flex items-center gap-3 p-2.5 text-sm">
+                <span className={`w-5 text-center font-bold ${i === 0 ? 'gold' : 'muted'}`}>{i + 1}</span>
+                <Avatar name={p.fullName} url={p.avatarUrl} size={26} />
+                <span className="flex-1 truncate">{p.fullName}{p.inpVerified ? ' ✓' : ''}</span>
+                <span className="chip">{p.rating}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* torneios */}
+      <Link href="/torneios" className="banner flex items-center justify-between p-4">
+        <div>
+          <div className="font-bold">🏟️ Torneios INP</div>
+          <div className="text-xs text-white/85">INP Championship · Kibaúla Cup · Batalha dos Cursos</div>
+        </div>
+        <span className="chip bg-black/20 text-white">Ver →</span>
+      </Link>
     </div>
   );
 }

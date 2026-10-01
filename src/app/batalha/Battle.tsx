@@ -18,19 +18,22 @@ function Bar({ label, value, max }: { label: string; value: number; max: number 
 }
 
 export default function Battle({ courses }: { courses: Course[] }) {
-  const [a, setA] = useState(courses[0]?.id ?? '');
-  const [b, setB] = useState(courses[1]?.id ?? '');
-  const ca = courses.find((c) => c.id === a);
-  const cb = courses.find((c) => c.id === b);
+  const [a, setA] = useState('');
+  const [b, setB] = useState('');
+  // predefinidos: 1º e 2º cursos (o estado '' resolve para eles)
+  const selA = courses.some((c) => c.id === a) ? a : courses[0]?.id ?? '';
+  const selB = courses.some((c) => c.id === b) ? b : courses[1]?.id ?? '';
+  const ca = courses.find((c) => c.id === selA);
+  const cb = courses.find((c) => c.id === selB);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <select value={a} onChange={(e) => setA(e.target.value)}>
+        <select value={selA} onChange={(e) => setA(e.target.value)}>
           {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <span className="text-xl font-bold accent">VS</span>
-        <select value={b} onChange={(e) => setB(e.target.value)}>
+        <select value={selB} onChange={(e) => setB(e.target.value)}>
           {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
